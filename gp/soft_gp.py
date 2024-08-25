@@ -1,39 +1,32 @@
+# System/Library imports
+import time
 from typing import *
 
-import time
-from tqdm import tqdm
-import wandb
+# Common data science imports
 import matplotlib.pyplot as plt
-
-import linear_operator
-from linear_operator.operators.dense_linear_operator import DenseLinearOperator
-from linear_operator.utils.cholesky import psd_safe_cholesky
-from linear_operator.settings import (
-        cg_tolerance,
-        max_cg_iterations,
-        max_preconditioner_size,
-        max_cholesky_size,
-)
-import math
 import numpy as np
-import gpytorch 
-import gpytorch.constraints
-from gpytorch.distributions import MultivariateNormal
-from gpytorch.kernels import RBFKernel, MaternKernel,ScaleKernel
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
+from tqdm import tqdm
 import torch
 from torch.utils.data import random_split, DataLoader, Dataset
 from torch.distributions import Gamma
 
-from gp.mll import HutchinsonPseudoLoss
-# from linear_solvers.CG_methods.gpytorch_cg_log_re import linear_log_cg_re,_default_preconditioner
-# from linear_solvers.CG_methods.gpytorch_cg_log import linear_log_cg
-# from linear_solvers.CG_methods.gpytorch_cg_re import linear_cg_re
+import wandb
 
-# from linear_solvers.CG_methods.gpytorch_cg import linear_cg
+# Gpytorch and linear_operator
+import gpytorch 
+import gpytorch.constraints
+from gpytorch.distributions import MultivariateNormal
+from gpytorch.kernels import ScaleKernel, RBFKernel, MaternKernel
+import linear_operator
+from linear_operator.operators.dense_linear_operator import DenseLinearOperator
+from linear_operator.utils.cholesky import psd_safe_cholesky
+from linear_operator.settings import max_cholesky_size
+
+# Our imports
+from gp.mll import HutchinsonPseudoLoss
 from linear_solver.cg import linear_cg
-from linear_solver.preconditioner import _default_preconditioner
 
 
 # =============================================================================
@@ -41,19 +34,25 @@ from linear_solver.preconditioner import _default_preconditioner
 # =============================================================================
 
 class SoftGP(torch.nn.Module):
-    def __init__(self, kernel: Callable, interp_type: str, inducing_points: torch.Tensor, mll_noise=1e-3, learn_noise=False, device="cpu", dtype=torch.float32, method="solve",mll_approx = "exact",cg_tolerance=0.5) -> None:
+    def __init__(
+        self,
+        kernel: Callable,
+        interp_type: str,
+        inducing_points: torch.Tensor,
+        mll_noise=1e-3,
+        learn_noise=False,
+        device="cpu",
+        dtype=torch.float32,
+        method="solve",
+        mll_approx = "exact",
+        cg_tolerance=0.5
+    ) -> None:
         # Argument checking 
-        methods = [ 
-            "cg",
-            "re-orth_cg",
-            "log_cg",
-            "re-orth_cg_log",
-            "cholesky",
-            "solve"
-        ]
+        methods = ["solve", "cholesky", "cg"]
         if not method in methods:
             raise ValueError(f"Method {method} should be in {methods} ...")
         
+        # Check devices
         devices = ["cpu"]
         if torch.cuda.is_available():
             devices += ["cuda"]
@@ -73,7 +72,6 @@ class SoftGP(torch.nn.Module):
         #Mll approximation settings
         self.mll_approx = mll_approx
         self.noise_prior = Gamma(concentration=1.1, rate=0.05)
-        # self.length_scale_prior = 
         
         # CG solver params
         self.max_cg_iter = 50
@@ -91,8 +89,7 @@ class SoftGP(torch.nn.Module):
 
         # Kernel
         if isinstance(kernel, ScaleKernel):
-            self.kernel=kernel.to(self.device)
-            
+            self.kernel = kernel.to(self.device)
         else:
             self.kernel = kernel.initialize(lengthscale=1).to(self.device)
 
@@ -105,46 +102,17 @@ class SoftGP(torch.nn.Module):
                 distances = torch.linalg.vector_norm(X - sigma_values, ord=2, dim=-1)
                 softmax_distances = torch.softmax(-distances, dim=-1)
                 return softmax_distances
-    
-            self.interp = softmax_interp
-            
-        elif interp_type=="softmax_stable":
-            # Attempts to induce numerical stability by subtracting the maximum value 
-            # from the input to the exponential function
-                def softmax_interp(X: torch.Tensor, sigma_values: torch.Tensor) -> torch.Tensor:
-                    distances = torch.linalg.vector_norm(X - sigma_values, ord=2, dim=-1)
-                    max_distance = torch.max(distances)
-                    stabilized_distances = -distances - max_distance
-                    softmax_distances = torch.softmax(stabilized_distances, dim=-1)
-                    return softmax_distances
-            
-                self.interp = softmax_interp
-        
-        # if interp_type == "boltzmann":
-        #     self.T = torch.nn.Parameter(torch.tensor(1.0))
-        #     def boltzmann_interp(X: torch.Tensor, sigma_values: torch.Tensor) -> torch.Tensor:
-        #             distances = torch.linalg.vector_norm(X - sigma_values, ord=2, dim=-1)
-        #             exp_distances = torch.exp(distances / self.T)
-        #             Z_theta = torch.sum(exp_distances, dim=-1, keepdim=True)
-        #             normalized_distances = exp_distances / Z_theta
-                    
-        #             return normalized_distances
-        #     self.interp = boltzmann_interp
-             
+            self.interp = softmax_interp         
         elif interp_type == "boltzmann":
             self.T = torch.nn.Parameter(torch.tensor(1.0))
             def boltzmann_interp(X: torch.Tensor, sigma_values: torch.Tensor) -> torch.Tensor:
-                    distances = torch.linalg.vector_norm(X - sigma_values, ord=2, dim=-1)
-                    min_distance = torch.min(distances, dim=-1, keepdim=True)[0]
-                    stabilized_distances = -distances + min_distance
-
-                    exp_distances = torch.exp(stabilized_distances / self.T)
-                    Z_theta = torch.sum(exp_distances, dim=-1, keepdim=True)
-                    normalized_distances = exp_distances / Z_theta
-                    
-                    return normalized_distances
+                distances = torch.linalg.vector_norm(X - sigma_values, ord=2, dim=-1)
+                exp_distances = torch.exp(distances / self.T)
+                Z_theta = torch.sum(exp_distances, dim=-1, keepdim=True)
+                normalized_distances = exp_distances / Z_theta
+                
+                return normalized_distances
             self.interp = boltzmann_interp
-
         else:
             raise ValueError(f"Interpolation {interp_type} not supported ...")
         
@@ -175,33 +143,18 @@ class SoftGP(torch.nn.Module):
 
     def _solve_system(self, kxx: linear_operator.operators.LinearOperator, x0: torch.Tensor, forwards_matmul: Callable, full_rhs: torch.Tensor, precond=None) -> torch.Tensor:
         # Source: https://github.com/AndPotap/halfpres_gps/blob/main/mlls/mixedpresmll.py
-        # linear_cg(A.matmul, b.unsqueeze(1), max_iter=self.max_cg_iter, tolerance=self.cg_tol).to(self.device)
         with torch.no_grad():
             solve_methods = {
                 "solve": lambda: torch.linalg.solve(kxx, full_rhs),
                 "cholesky": lambda: torch.cholesky_solve(full_rhs, torch.linalg.cholesky(kxx)),
                 "cg": lambda: linear_cg(
-                        forwards_matmul,
-                        full_rhs,
-                        initial_guess=x0,
-                        max_iter=self.max_cg_iter,
-                        tolerance=self.cg_tol,
-                        preconditioner=precond),
-                # "re-orth_cg": lambda: linear_cg_re(
-                #         forwards_matmul,
-                #         full_rhs,
-                #         initial_guess=x0,
-                #         max_iter=self.max_cg_iter,
-                #         tolerance=self.cg_tol,
-                #         preconditioner=precond),
-                # "log_cg": lambda: linear_log_cg(
-                #         forwards_matmul,
-                #         full_rhs,
-                #         initial_guess=x0,
-                #         max_iter=self.max_cg_iter,
-                #         tolerance=self.cg_tol,
-                #         preconditioner=precond),
-                # "re-orth_cg_log": lambda: linear_log_cg_re(forwards_matmul, full_rhs, x0, max_iter=self.max_cg_iter, tolerance=self.cg_tol, preconditioner=precond), 
+                    forwards_matmul,
+                    full_rhs,
+                    initial_guess=x0,
+                    max_iter=self.max_cg_iter,
+                    tolerance=self.cg_tol,
+                    preconditioner=precond
+                ),
             }
 
             try:
@@ -215,56 +168,40 @@ class SoftGP(torch.nn.Module):
                 print("Fallback to pseudoinverse: ", str(e))
                 solve = torch.linalg.pinv(kxx.evaluate()) @ full_rhs
 
-            solve = torch.nan_to_num(solve)  # Apply torch.nan_to_num to handle NaNs from percision limits 
-
-        return solve
+        # Apply torch.nan_to_num to handle NaNs from percision limits 
+        return torch.nan_to_num(solve)
 
     # -----------------------------------------------------
     # Marginal Log Likelihood
     # -----------------------------------------------------
 
-    def mll(self, inducing_points: torch.Tensor, X: torch.Tensor, y: torch.Tensor, mll_approx="hutchinson",high_prec=False, noise_prior=False,*params) -> torch.Tensor:
-        K_zz = self._mk_cov(inducing_points)
+    def mll(self, Z: torch.Tensor, X: torch.Tensor, y: torch.Tensor, mll_approx="hutchinson") -> torch.Tensor:        
+        # Construct covariance matrix components
+        K_zz = self._mk_cov(Z)
         W_xz = self._interp(X)
-
-        cov_mat = W_xz @ K_zz @ W_xz.T 
-        cov_mat += torch.eye(cov_mat.shape[1], dtype=self.dtype, device=self.device) * self.mll_noise 
         
-        #TODO: Optionally more accuracte ~5% at 5x epoch time overhead
-        
-        # eigenvalues = torch.linalg.eigvals(cov_mat).real
-        # if torch.any(eigenvalues < 0):
-        #     print("Minimum eigenvalue:", eigenvalues.min().item())
-        #     additional_jitter = abs(eigenvalues.min().item()) + 1e-3
-        #     cov_mat += torch.eye(cov_mat.shape[0], dtype=W_xz.dtype, device=W_xz.device) * additional_jitter
-        
-        self.cov_mat = cov_mat
-
-        if high_prec:
-            if self.dtype != torch.float64:
-                raise ValueError(f"Using a version of the marginal log likelihood that only works in high precision with {self.dtype} ...")
+        if mll_approx == "exact":
+            # Note: Unstable for float.
             L = psd_safe_cholesky(K_zz)
             LK = (W_xz @ L).to(device=self.device)
             mean = torch.zeros(len(X), dtype=self.dtype, device=self.device)
             cov_diag = self.mll_noise * torch.ones(len(X), dtype=self.dtype, device=self.device)
             normal_dist = torch.distributions.lowrank_multivariate_normal.LowRankMultivariateNormal(mean, LK, cov_diag, validate_args=None)
             return normal_dist.log_prob(y)
-        
-        if mll_approx == "exact":
-            # Note: Unstable for float.
-            #       We probably want some logic to swap to trace estimation for 32 
-            mean = torch.zeros(len(X), dtype=self.dtype, device=self.device)
-            function_dist = MultivariateNormal(mean, cov_mat)
-            return function_dist.log_prob(y)
+
+            # mean = torch.zeros(len(X), dtype=self.dtype, device=self.device)
+            # function_dist = MultivariateNormal(mean, cov_mat)
+            # return function_dist.log_prob(y)
         elif mll_approx == "hutchinson":
+            # Construct covariance matrix
+            cov_mat = W_xz @ K_zz @ W_xz.T 
+            cov_mat += torch.eye(cov_mat.shape[1], dtype=self.dtype, device=self.device) * self.mll_noise         
+            self.cov_mat = cov_mat
+
+            # Compute estimate of MLL
             mean = torch.zeros(len(X), dtype=self.dtype, device=self.device)
             mll = HutchinsonPseudoLoss(self, cg_iters=self.max_cg_iter, cg_tolerance=self.cg_tol, num_trace_samples=10)      
-            loss = mll(mean, cov_mat, y)
-            if noise_prior:
-                log_prior = self.noise_prior.log_prob(self.mll_noise).sum()
-                return loss + log_prior
-            else:
-                return loss
+            return mll(mean, cov_mat, y)
         else:
             raise ValueError(f"Unknown MLL approximation method: {mll_approx}")
         
@@ -351,6 +288,10 @@ class SoftGP(torch.nn.Module):
         W_star_z = self._interp(x_star)
         return torch.matmul(W_star_z, self.K_zz_alpha).squeeze(-1)
 
+
+# =============================================================================
+# Train and Test Harness
+# =============================================================================
 
 def train_gp(
         dataset_name: str,
