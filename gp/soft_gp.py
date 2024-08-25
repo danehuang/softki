@@ -5,7 +5,6 @@ from typing import *
 # Common data science imports
 import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from tqdm import tqdm
 import torch
@@ -141,27 +140,31 @@ class SoftGP(torch.nn.Module):
     # Linear solve
     # -----------------------------------------------------
 
-    def _solve_system(self, kxx: linear_operator.operators.LinearOperator, x0: torch.Tensor, forwards_matmul: Callable, full_rhs: torch.Tensor, precond=None) -> torch.Tensor:
-        # Source: https://github.com/AndPotap/halfpres_gps/blob/main/mlls/mixedpresmll.py
+    def _solve_system(
+        self,
+        kxx: linear_operator.operators.LinearOperator,
+        x0: torch.Tensor,
+        forwards_matmul: Callable,
+        full_rhs: torch.Tensor,
+        precond=None
+    ) -> torch.Tensor:
         with torch.no_grad():
-            solve_methods = {
-                "solve": lambda: torch.linalg.solve(kxx, full_rhs),
-                "cholesky": lambda: torch.cholesky_solve(full_rhs, torch.linalg.cholesky(kxx)),
-                "cg": lambda: linear_cg(
-                    forwards_matmul,
-                    full_rhs,
-                    initial_guess=x0,
-                    max_iter=self.max_cg_iter,
-                    tolerance=self.cg_tol,
-                    preconditioner=precond
-                ),
-            }
-
             try:
-                if self.method in solve_methods:
-                    # print(full_rhs.shape)
-
-                    solve = solve_methods[self.method]()
+                if self.method == "solve":
+                    solve = torch.linalg.solve(kxx, full_rhs)
+                elif self.method == "cholesky":
+                    L = torch.linalg.cholesky(kxx)
+                    solve = torch.cholesky_solve(full_rhs, L)
+                elif self.method == "cg":
+                    # Source: https://github.com/AndPotap/halfpres_gps/blob/main/mlls/mixedpresmll.py
+                    solve = linear_cg(
+                        forwards_matmul,
+                        full_rhs,
+                        initial_guess=x0,
+                        max_iter=self.max_cg_iter,
+                        tolerance=self.cg_tol,
+                        preconditioner=precond
+                    )
                 else:
                     raise ValueError(f"Unknown method: {self.method}")
             except RuntimeError as e:
@@ -313,7 +316,6 @@ def train_gp(
         lr=0.01,
         device="cuda:0",
         dtype=torch.float64,
-        high_prec=False,
         group="test",
         project="isgp",
         watch=False,
@@ -408,7 +410,7 @@ def train_gp(
             
             optimizer.zero_grad()
             with gpytorch.settings.max_root_decomposition_size(100), max_cholesky_size(int(1.e7)):
-                neg_mll = -model.mll(inducing_points, x_batch, y_batch, high_prec=high_prec)
+                neg_mll = -model.mll(inducing_points, x_batch, y_batch)
             neg_mlls += [-neg_mll.item()]
             neg_mll.backward()
             optimizer.step()

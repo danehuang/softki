@@ -52,10 +52,7 @@ def initialize_cg(matmul_closure, rhs, stop_updating_after, eps):
 
 
 
-def take_cg_step(
-        Ap0, x0, r0, gamma0, p0, alpha, beta, z0, mul_storage, has_converged, eps,
-        is_zero):
-
+def take_cg_step(Ap0, x0, r0, gamma0, p0, alpha, beta, z0, mul_storage, has_converged, eps, is_zero):
     torch.mul(p0, Ap0, out=mul_storage)
     torch.sum(mul_storage, dim=-2, keepdim=True, out=alpha)
 
@@ -86,8 +83,7 @@ def take_cg_step(
     p0.mul_(beta).add_(precond_residual)
 
 
-def cond_fn(k, max_iter, tolerance, residual, has_converged, residual_norm,
-            stop_updating_after, rhs_is_zero):
+def cond_fn(k, max_iter, tolerance, residual, has_converged, residual_norm, stop_updating_after, rhs_is_zero):
     torch.norm(residual, 2, dim=-2, keepdim=True, out=residual_norm)
     residual_norm.masked_fill_(rhs_is_zero, 0)
     torch.lt(residual_norm, stop_updating_after, out=has_converged)
