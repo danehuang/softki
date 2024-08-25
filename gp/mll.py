@@ -1,0 +1,73 @@
+from gpytorch.distributions import MultivariateNormal
+import torch
+
+
+from linear_solver.preconditioner import _default_preconditioner
+
+
+class HutchinsonPseudoLoss:
+    def __init__(self, model, cg_iters=50, cg_tolerance=1e-5, num_trace_samples=10):
+        self.model = model
+        self.x0 = None
+        self.cg_iters = cg_iters
+        self.cg_tolerance = cg_tolerance
+        self.num_trace_samples = num_trace_samples
+
+    def update_x0(self, full_rhs):
+        x0 = torch.zeros_like(full_rhs)
+        return x0
+
+    def forward(self, mean, cov_mat, target, *params):
+        function_dist = MultivariateNormal(mean, cov_mat)
+        
+        full_rhs, probe_vectors = self.get_rhs_and_probes(rhs=target - function_dist.mean, num_random_probes=self.num_trace_samples)
+        kxx = function_dist.lazy_covariance_matrix.evaluate_kernel()
+
+        # Cholesky Woodbury matrix preconditioner
+        precond, *_ = kxx._preconditioner()
+        if precond is None:
+            precond = _default_preconditioner
+            
+        forwards_matmul = kxx.matmul
+        
+        x0 = self.update_x0(full_rhs)
+        result = self.model._solve_system(
+            kxx=kxx,
+            x0=x0,
+            forwards_matmul=forwards_matmul,
+            full_rhs=full_rhs,
+            precond=precond
+        )
+        
+        self.x0 = result.clone()
+        
+        pseudo_loss = self.compute_pseudo_loss(
+            forwards_matmul=forwards_matmul,
+            solve=result,
+            probe_vectors=probe_vectors,
+            function_dist=function_dist,
+            params=params
+        )
+        return pseudo_loss
+
+    def compute_pseudo_loss(self, forwards_matmul, solve, probe_vectors, function_dist, params):
+        data_solve = solve[..., 0].unsqueeze(-1).contiguous()
+        data_term = (-data_solve * forwards_matmul(data_solve).float()).sum(-2) / 2
+        logdet_term = (
+            (solve[..., 1:] * forwards_matmul(probe_vectors).float()).sum(-2)
+            / (2 * probe_vectors.shape[-1])
+        )
+        res = -data_term - logdet_term.sum(-1)
+        num_data = function_dist.event_shape.numel()
+        return res.div_(num_data)
+
+    def get_rhs_and_probes(self, rhs, num_random_probes):
+        probe_vectors = torch.randn(
+            rhs.shape[-1], num_random_probes, device=rhs.device, dtype=rhs.dtype
+        ).contiguous()
+        full_rhs = torch.cat((rhs.unsqueeze(-1), probe_vectors), -1)
+        return full_rhs, probe_vectors
+    
+    def __call__(self, mean, cov_mat, target, *params):
+        return self.forward(mean, cov_mat, target, *params)
+    
