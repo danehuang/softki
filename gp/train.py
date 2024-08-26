@@ -56,6 +56,10 @@ def dynamic_instantiation(config: DictConfig) -> Any:
     return target_class(**{k: v for k, v in config.items() if k != '_target_'})
 
 
+def filter_param(named_params: list[Tuple[str, torch.nn.Parameter]], name: str) -> list[Tuple[str, torch.nn.Parameter]]:
+    return [param for n, param in named_params if n != name]
+
+
 # ---------------------------------------------------------
 # Train/Eval
 # ---------------------------------------------------------
@@ -118,8 +122,6 @@ def train_gp(dataset_name: str, train_dataset: Dataset, test_dataset: Dataset, c
     )
 
     # Setup optimizer for hyperparameters
-    def filter_param(named_params, name):
-        return [param for n, param in named_params if n != name]
     if learn_noise:
         params = model.parameters()
     else:
@@ -131,6 +133,8 @@ def train_gp(dataset_name: str, train_dataset: Dataset, test_dataset: Dataset, c
     pbar = tqdm(range(epochs), desc="Optimizing MLL")
     for epoch in pbar:
         t1 = time.perf_counter()
+        
+        # Perform an epoch of fitting hyperparameters (including inducing points)
         neg_mlls = []
         for x_batch, y_batch in train_loader:
             # Load batch
@@ -150,10 +154,14 @@ def train_gp(dataset_name: str, train_dataset: Dataset, test_dataset: Dataset, c
             pbar.set_postfix(MLL=f"{-neg_mll.item()}")
         t2 = time.perf_counter()
 
+        # Solve for weights given fixed inducing points
         model.fit(train_features, train_labels)
         t3 = time.perf_counter()
 
+        # Evaluated gp
         results = eval_gp(model, test_dataset, device=device)
+
+        # Record
         if config.wandb.watch:
             wandb.log({
                 "loss": torch.tensor(neg_mlls).mean(),

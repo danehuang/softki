@@ -1,5 +1,5 @@
-from gpytorch.utils.deprecation import bool_compat
 import torch
+from gpytorch.utils.deprecation import bool_compat
 
 from linear_solver.preconditioner import _default_preconditioner
 
