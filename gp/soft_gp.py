@@ -9,14 +9,12 @@ from sklearn.cluster import KMeans
 from tqdm import tqdm
 import torch
 from torch.utils.data import random_split, DataLoader, Dataset
-from torch.distributions import Gamma
 
 import wandb
 
 # Gpytorch and linear_operator
 import gpytorch 
 import gpytorch.constraints
-from gpytorch.distributions import MultivariateNormal
 from gpytorch.kernels import ScaleKernel, RBFKernel, MaternKernel
 import linear_operator
 from linear_operator.operators.dense_linear_operator import DenseLinearOperator
@@ -36,20 +34,21 @@ class SoftGP(torch.nn.Module):
     def __init__(
         self,
         kernel: Callable,
-        interp_type: str,
         inducing_points: torch.Tensor,
-        mll_noise=1e-3,
+        noise=1e-3,
         learn_noise=False,
         device="cpu",
         dtype=torch.float32,
-        method="solve",
-        mll_approx = "exact",
-        cg_tolerance=0.5
+        solve_method="solve",
+        mll_approx="hutchinson",
+        fit_chunk_size=1024,
+        max_cg_iter=50,
+        cg_tolerance=0.5,
     ) -> None:
         # Argument checking 
         methods = ["solve", "cholesky", "cg"]
-        if not method in methods:
-            raise ValueError(f"Method {method} should be in {methods} ...")
+        if not solve_method in methods:
+            raise ValueError(f"Method {solve_method} should be in {methods} ...")
         
         # Check devices
         devices = ["cpu"]
@@ -66,25 +65,20 @@ class SoftGP(torch.nn.Module):
         # Misc
         self.device = device
         self.dtype = dtype
-        self.method = method
         
-        #Mll approximation settings
+        # Mll approximation settings
+        self.solve_method = solve_method
         self.mll_approx = mll_approx
-        self.noise_prior = Gamma(concentration=1.1, rate=0.05)
-        
-        # CG solver params
-        self.max_cg_iter = 50
-        self.cg_tol = cg_tolerance
-        self.x0 = None
+        self.fit_chunk_size = fit_chunk_size
 
         # Noise
         self.noise_constraint = gpytorch.constraints.Positive()
-        noise = torch.tensor([mll_noise], dtype=self.dtype, device=self.device)
+        noise = torch.tensor([noise], dtype=self.dtype, device=self.device)
         noise = self.noise_constraint.inverse_transform(noise)
         if learn_noise:
-            self.register_parameter("raw_mll_noise", torch.nn.Parameter(noise))
+            self.register_parameter("raw_noise", torch.nn.Parameter(noise))
         else:
-            self.raw_mll_noise = noise
+            self.raw_noise = noise
 
         # Kernel
         if isinstance(kernel, ScaleKernel):
@@ -96,77 +90,68 @@ class SoftGP(torch.nn.Module):
         self.register_parameter("inducing_points", torch.nn.Parameter(inducing_points))
 
         # Interpolation
-        if interp_type == "softmax":
-            def softmax_interp(X: torch.Tensor, sigma_values: torch.Tensor) -> torch.Tensor:
-                distances = torch.linalg.vector_norm(X - sigma_values, ord=2, dim=-1)
-                softmax_distances = torch.softmax(-distances, dim=-1)
-                return softmax_distances
-            self.interp = softmax_interp         
-        elif interp_type == "boltzmann":
-            self.T = torch.nn.Parameter(torch.tensor(1.0))
-            def boltzmann_interp(X: torch.Tensor, sigma_values: torch.Tensor) -> torch.Tensor:
-                distances = torch.linalg.vector_norm(X - sigma_values, ord=2, dim=-1)
-                exp_distances = torch.exp(distances / self.T)
-                Z_theta = torch.sum(exp_distances, dim=-1, keepdim=True)
-                normalized_distances = exp_distances / Z_theta
-                
-                return normalized_distances
-            self.interp = boltzmann_interp
-        else:
-            raise ValueError(f"Interpolation {interp_type} not supported ...")
+        def softmax_interp(X: torch.Tensor, sigma_values: torch.Tensor) -> torch.Tensor:
+            distances = torch.linalg.vector_norm(X - sigma_values, ord=2, dim=-1)
+            softmax_distances = torch.softmax(-distances, dim=-1)
+            return softmax_distances
+        self.interp = softmax_interp
         
         # Fit artifacts
         self.alpha = None
-        self.K_zz = None
         self.K_zz_alpha = None
+
+        # CG solver params
+        self.max_cg_iter = max_cg_iter
+        self.cg_tol = cg_tolerance
+        self.x0 = None
         
     # -----------------------------------------------------
-    # GP Helpers
+    # Soft GP Helpers
     # -----------------------------------------------------
     
     @property
-    def mll_noise(self):
-        return self.noise_constraint.transform(self.raw_mll_noise)
+    def noise(self):
+        return self.noise_constraint.transform(self.raw_noise)
 
     def _mk_cov(self, z: torch.Tensor) -> torch.Tensor:
         return self.kernel(z, z).evaluate()
     
-    def _interp(self, x):
+    def _interp(self, x: torch.Tensor) -> torch.Tensor:
         x_expanded = x.unsqueeze(1).expand(-1, self.inducing_points.shape[0], -1)
         W_xz = self.interp(x_expanded, self.inducing_points)
         return W_xz
 
     # -----------------------------------------------------
-    # Linear solve
+    # Linear solver
     # -----------------------------------------------------
 
     def _solve_system(
         self,
         kxx: linear_operator.operators.LinearOperator,
-        x0: torch.Tensor,
-        forwards_matmul: Callable,
         full_rhs: torch.Tensor,
-        precond=None
+        x0: torch.Tensor = None,
+        forwards_matmul: Callable = None,
+        precond: torch.Tensor = None,
     ) -> torch.Tensor:
         with torch.no_grad():
             try:
-                if self.method == "solve":
+                if self.solve_method == "solve":
                     solve = torch.linalg.solve(kxx, full_rhs)
-                elif self.method == "cholesky":
+                elif self.solve_method == "cholesky":
                     L = torch.linalg.cholesky(kxx)
                     solve = torch.cholesky_solve(full_rhs, L)
-                elif self.method == "cg":
+                elif self.solve_method == "cg":
                     # Source: https://github.com/AndPotap/halfpres_gps/blob/main/mlls/mixedpresmll.py
                     solve = linear_cg(
                         forwards_matmul,
                         full_rhs,
-                        initial_guess=x0,
                         max_iter=self.max_cg_iter,
                         tolerance=self.cg_tol,
-                        preconditioner=precond
+                        initial_guess=x0,
+                        preconditioner=precond,
                     )
                 else:
-                    raise ValueError(f"Unknown method: {self.method}")
+                    raise ValueError(f"Unknown method: {self.solve_method}")
             except RuntimeError as e:
                 print("Fallback to pseudoinverse: ", str(e))
                 solve = torch.linalg.pinv(kxx.evaluate()) @ full_rhs
@@ -178,116 +163,173 @@ class SoftGP(torch.nn.Module):
     # Marginal Log Likelihood
     # -----------------------------------------------------
 
-    def mll(self, Z: torch.Tensor, X: torch.Tensor, y: torch.Tensor, mll_approx="hutchinson") -> torch.Tensor:        
+    def mll(self, X: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        """Compute the marginal log likelihood of a soft GP:
+            
+            log p(y) = log N(y | mu_x, Q_xx)
+
+            where
+                mu_X: mean of soft GP
+                Q_XX = W_xz K_zz W_zx
+
+        Args:
+            X (torch.Tensor): B x D tensor of inputs where each row is a point.
+            y (torch.Tensor): B tensor of targets.
+
+        Returns:
+            torch.Tensor:  log p(y)
+        """        
         # Construct covariance matrix components
-        K_zz = self._mk_cov(Z)
+        K_zz = self._mk_cov(self.inducing_points)
         W_xz = self._interp(X)
         
-        if mll_approx == "exact":
-            # Note: Unstable for float.
+        if self.mll_approx == "exact":
+            # [Note]: Compute MLL with a multivariate normal. Unstable for float.
+            # 1. mean: 0
+            mean = torch.zeros(len(X), dtype=self.dtype, device=self.device)
+            
+            # 2. covariance: Q_xx = (W_xz L) (L^T W_xz) + noise I  where K_zz = L L^T
             L = psd_safe_cholesky(K_zz)
             LK = (W_xz @ L).to(device=self.device)
-            mean = torch.zeros(len(X), dtype=self.dtype, device=self.device)
-            cov_diag = self.mll_noise * torch.ones(len(X), dtype=self.dtype, device=self.device)
+            cov_diag = self.noise * torch.ones(len(X), dtype=self.dtype, device=self.device)
+
+            # 3. N(mu, Q_xx)
             normal_dist = torch.distributions.lowrank_multivariate_normal.LowRankMultivariateNormal(mean, LK, cov_diag, validate_args=None)
+            
+            # 4. log N(y | mu, Q_xx)
             return normal_dist.log_prob(y)
-
-            # mean = torch.zeros(len(X), dtype=self.dtype, device=self.device)
-            # function_dist = MultivariateNormal(mean, cov_mat)
-            # return function_dist.log_prob(y)
-        elif mll_approx == "hutchinson":
-            # Construct covariance matrix
-            cov_mat = W_xz @ K_zz @ W_xz.T 
-            cov_mat += torch.eye(cov_mat.shape[1], dtype=self.dtype, device=self.device) * self.mll_noise         
-            self.cov_mat = cov_mat
-
-            # Compute estimate of MLL
+        elif self.mll_approx == "hutchinson":
+            # [Note]: Compute MLL with Hutchinson's trace estimator
+            # 1. mean: 0
             mean = torch.zeros(len(X), dtype=self.dtype, device=self.device)
-            mll = HutchinsonPseudoLoss(self, cg_iters=self.max_cg_iter, cg_tolerance=self.cg_tol, num_trace_samples=10)      
-            return mll(mean, cov_mat, y)
+            
+            # 2. covariance: Q_xx = W_xz K_zz K_zx + noise I
+            cov_mat = W_xz @ K_zz @ W_xz.T 
+            cov_mat += torch.eye(cov_mat.shape[1], dtype=self.dtype, device=self.device) * self.noise
+
+            # 3. log N(y | mu, Q_xx) \appox 
+            hutchinson_mll = HutchinsonPseudoLoss(self, num_trace_samples=10)
+            return hutchinson_mll(mean, cov_mat, y)
         else:
-            raise ValueError(f"Unknown MLL approximation method: {mll_approx}")
+            raise ValueError(f"Unknown MLL approximation method: {self.mll_approx}")
         
     # -----------------------------------------------------
     # Fit
     # -----------------------------------------------------
 
-    def fit(self, X: torch.Tensor, Y: torch.Tensor, batch=False) -> None:
+    def fit(self, X: torch.Tensor, y: torch.Tensor) -> None:
+        """Fits a SoftGP to dataset (X, y). That is, solve:
+
+                (hat{K}_zx @ noise^{-1}) y = (K_zz + hat{K}_zx @ noise^{-1} @ hat{K}_xz) \alpha
+        
+            for \alpha where
+            1. inducing points z are fixed,
+            2. hat{K}_zx = K_zz W_zx, and
+            2. hat{K}_xz = hat{K}_zx^T.
+
+        Args:
+            X (torch.Tensor): N x D tensor of inputs
+            y (torch.Tensor): N tensor of outputs
+        """        
+        # Prepare inputs
         N = len(X)
         M = len(self.inducing_points)
-        X, Y = X.to(self.device, dtype=self.dtype), Y.to(self.device, dtype=self.dtype)
+        X = X.to(self.device, dtype=self.dtype)
+        y = y.to(self.device, dtype=self.dtype)
 
         # Form K_zz
-        self.K_zz = self._mk_cov(self.inducing_points)
+        K_zz = self._mk_cov(self.inducing_points)
 
-        # Form estimate \hat{K}_xz ~= W_xz K_zz
-        if batch or X.shape[0] * X.shape[1] > 32768:
+        # Construct A and b for linear solve
+        if X.shape[0] * X.shape[1] <= 32768:
+            # Case: "small" X
+            # Form estimate \hat{K}_xz ~= W_xz K_zz
+            W_xz = self._interp(X)
+            hat_K_xz = W_xz @ K_zz
+            hat_K_zx = hat_K_xz.T
+            
+            # Note:
+            #   A = K_zz + \hat{K}_zx @ noise^{-1} @ \hat{K}_xz
+            #   b = \hat{K}_zx @ noise^{-1} @ y
+            Lambda_inv_diag = (1 / self.noise) * torch.ones(N, dtype=self.dtype).to(self.device)
+            A = K_zz + hat_K_zx @ (Lambda_inv_diag.unsqueeze(1) * hat_K_xz)
+            b = hat_K_zx @ (Lambda_inv_diag * y)
+        else:
+            # Case: "large" X
             with torch.no_grad():
-                batch_size = 1024
-                batches = int(np.floor(N / batch_size))
+                # Initialize outputs
                 A = torch.zeros(M, M, dtype=self.dtype, device=self.device)
                 b = torch.zeros(M, dtype=self.dtype, device=self.device)
-                Lambda_inv = (1 / self.mll_noise) * torch.eye(batch_size, dtype=self.dtype, device=self.device)
-                tmp1 = torch.zeros(batch_size, M, dtype=self.dtype, device=self.device)
+                
+                # Initialize temporary values
+                fit_chunk_size = self.fit_chunk_size
+                batches = int(np.floor(N / fit_chunk_size))
+                Lambda_inv = (1 / self.noise) * torch.eye(fit_chunk_size, dtype=self.dtype, device=self.device)
+                tmp1 = torch.zeros(fit_chunk_size, M, dtype=self.dtype, device=self.device)
                 tmp2 = torch.zeros(M, M, dtype=self.dtype, device=self.device)
-                tmp3 = torch.zeros(batch_size, dtype=self.dtype, device=self.device)
+                tmp3 = torch.zeros(fit_chunk_size, dtype=self.dtype, device=self.device)
                 tmp4 = torch.zeros(M, dtype=self.dtype, device=self.device)
                 tmp5 = torch.zeros(M, dtype=self.dtype, device=self.device)
+                
+                # Compute batches
                 for i in range(batches):
-                    x = X[i*batch_size:(i+1)*batch_size]
-                    
                     # [Note]:
                     #   A += W_zx @ Lambda_inv @ W_xz
-                    W_xz = self._interp(x)
+                    X_batch = X[i*fit_chunk_size:(i+1)*fit_chunk_size]
+                    W_xz = self._interp(X_batch)
                     W_zx = W_xz.T
                     torch.matmul(Lambda_inv, W_xz, out=tmp1)
                     torch.matmul(W_zx, tmp1, out=tmp2)
                     A.add_(tmp2)
                     
                     # [Note]:
-                    #   b += self.K_zz @ W_zx @ (Lambda_inv @ Y[i*batch_size:(i+1)*batch_size])
-                    torch.matmul(Lambda_inv, Y[i*batch_size:(i+1)*batch_size], out=tmp3)
+                    #   b += K_zz @ W_zx @ (Lambda_inv @ Y[i*batch_size:(i+1)*batch_size])
+                    torch.matmul(Lambda_inv, y[i*fit_chunk_size:(i+1)*fit_chunk_size], out=tmp3)
                     torch.matmul(W_zx, tmp3, out=tmp4)
-                    torch.matmul(self.K_zz, tmp4, out=tmp5)
+                    torch.matmul(K_zz, tmp4, out=tmp5)
                     b.add_(tmp5)
                 
-                if N - (i+1)*batch_size > 0:
-                    Lambda_inv = (1 / self.mll_noise) * torch.eye(N - (i+1)*batch_size, dtype=self.dtype, device=self.device)
-                    x = X[(i+1)*batch_size:]
-                    W_xz = self._interp(x)
+                # Compute last batch
+                if N - (i+1)*fit_chunk_size > 0:
+                    Lambda_inv = (1 / self.noise) * torch.eye(N - (i+1)*fit_chunk_size, dtype=self.dtype, device=self.device)
+                    X_batch = X[(i+1)*fit_chunk_size:]
+                    W_xz = self._interp(X_batch)
                     A += W_xz.T @ Lambda_inv @ W_xz
-                    b += self.K_zz @ W_xz.T @ Lambda_inv @ Y[(i+1)*batch_size:]
-                A = self.K_zz + self.K_zz @ A @ self.K_zz
-        else:
-            W_xz = self._interp(X)
-            hat_K_xz = W_xz @ self.K_zz
-            hat_K_zx = hat_K_xz.T
-            
-            # Note:
-            #   A = K_zz + \hat{K}_zx @ noise^{-1} @ \hat{K}_xz
-            #   B = \hat{K}_zx @ noise^{-1} @ y
-            Lambda_inv_diag = (1 / self.mll_noise) * torch.ones(N, dtype=self.dtype).to(self.device)
-            A = self.K_zz + hat_K_zx @ (Lambda_inv_diag.unsqueeze(1) * hat_K_xz)
-            b = hat_K_zx @ (Lambda_inv_diag * Y)
+                    b += K_zz @ W_xz.T @ Lambda_inv @ y[(i+1)*fit_chunk_size:]
 
-        # Safe solve A \alpha = B
-        kxx = DenseLinearOperator(A)
+                # Aggregate result
+                A = K_zz + K_zz @ A @ K_zz
+
+        # Safe solve A \alpha = b
+        Q_xx = DenseLinearOperator(A)
         self.alpha = self._solve_system(
-            kxx=kxx,
-            full_rhs=b.unsqueeze(1),
+            Q_xx,
+            b.unsqueeze(1),
             x0=torch.zeros_like(b),
-            forwards_matmul=kxx.matmul,
+            forwards_matmul=Q_xx.matmul,
             precond=None
         )
 
         # Store for fast prediction
-        self.K_zz_alpha = self.K_zz @ self.alpha
+        self.K_zz_alpha = K_zz @ self.alpha
 
     # -----------------------------------------------------
     # Predict
     # -----------------------------------------------------
 
     def pred(self, x_star: torch.Tensor) -> torch.Tensor:
+        """Give the posterior predictive:
+        
+            p(y_star | x_star, X, y) 
+                = W_star_z (K_zz \alpha)
+                = W_star_z K_zz (K_zz + hat{K}_zx @ noise^{-1} @ hat{K}_xz)^{-1} (hat{K}_zx @ noise^{-1}) y
+
+        Args:
+            x_star (torch.Tensor): B x D tensor of points to evaluate at.
+
+        Returns:
+            torch.Tensor: B tensor of p(y_star | x_star, X, y).
+        """        
         W_star_z = self._interp(x_star)
         return torch.matmul(W_star_z, self.K_zz_alpha).squeeze(-1)
 
@@ -296,31 +338,43 @@ class SoftGP(torch.nn.Module):
 # Train and Test Harness
 # =============================================================================
 
+def flatten_dataset(dataset: Dataset) -> Tuple[torch.Tensor, torch.Tensor]:
+    train_loader = DataLoader(dataset, batch_size=1024, shuffle=False)
+    train_x = []
+    train_y = []
+    for batch_x, batch_y in train_loader:
+        train_x += [batch_x]
+        train_y += [batch_y]
+    train_x = torch.cat(train_x, dim=0)
+    train_y = torch.cat(train_y, dim=0).squeeze(-1)
+    return train_x, train_y
+
+
 def train_gp(
-        dataset_name: str,
-        train_dataset: Dataset,
-        test_dataset: Dataset,
-        D: int,
-        seed=42,
-        train_frac=4/9,
-        val_frac=3/9,
-        kernel="matern",
-        interp_type="softmax",
-        mll_noise=1e-3,
-        learn_noise=False,
-        num_inducing=1024,
-        solver="solve",
-        cg_tolerance=1e-5,
-        epochs=50,
-        batch_size=1024,
-        lr=0.01,
-        device="cuda:0",
-        dtype=torch.float64,
-        group="test",
-        project="isgp",
-        watch=False,
-        trace=False,
-        ):
+    dataset_name: str,
+    train_dataset: Dataset,
+    test_dataset: Dataset,
+    D: int,
+    seed=42,
+    train_frac=4/9,
+    val_frac=3/9,
+    kernel="matern",
+    interp_type="softmax",
+    noise=1e-3,
+    learn_noise=False,
+    num_inducing=1024,
+    solver="solve",
+    cg_tolerance=1e-5,
+    epochs=50,
+    batch_size=1024,
+    lr=0.01,
+    device="cuda:0",
+    dtype=torch.float64,
+    group="test",
+    project="isgp",
+    watch=False,
+    trace=False,
+):
     if watch:
         config = {
             "model": "softgp",
@@ -341,27 +395,20 @@ def train_gp(
             "solver": solver,
             "cg_tolerance": cg_tolerance,
         }
-        rname = f"softgp{dataset_name}_{interp_type}_{solver}_{dtype}_{num_inducing}_{batch_size}_{mll_noise}"
+        rname = f"softgp{dataset_name}_{interp_type}_{solver}_{dtype}_{num_inducing}_{batch_size}_{noise}"
         wandb.init(project=project, entity="bogp", group=group, name=rname, config=config)
 
-    # Prepare dataset
-    train_features, train_labels = zip(*[(torch.tensor(features), torch.tensor(labels)) for features, labels in train_dataset])
-    train_features = torch.stack(train_features).squeeze(-1)
-    train_labels = torch.stack(train_labels).squeeze(-1)
-
-    test_features, test_labels = zip(*[(torch.tensor(features), torch.tensor(labels)) for features, labels in test_dataset])
-    test_features = torch.stack(test_features).squeeze(-1)
-    test_labels = torch.stack(test_labels).squeeze(-1)
-
-    # Model setup
+    # Set seed
     np.random.seed(seed)
+
+    # Initialize inducing points with kmeans
+    train_features, train_labels = flatten_dataset(train_dataset)
     kmeans = KMeans(n_clusters=num_inducing)
     kmeans.fit(train_features)
     centers = kmeans.cluster_centers_
-    # indices = np.random.choice(len(train_features), num_inducing, replace=False)
-    # inducing_points = train_features[indices].to(dtype=dtype, device=device)
     inducing_points = torch.tensor(centers).to(dtype=dtype, device=device)
     
+    # Setup kernel
     if kernel == "rbf":
         k = RBFKernel()
     elif kernel == "rbf-ard":
@@ -375,26 +422,16 @@ def train_gp(
     else:
         raise ValueError(f"Kernel {kernel} not supported ...")
     
-    model = SoftGP(k, interp_type, inducing_points, dtype=dtype, device=device, mll_noise=mll_noise, learn_noise=learn_noise, method=solver, cg_tolerance=cg_tolerance)
+    # Setup model
+    model = SoftGP(k, inducing_points, dtype=dtype, device=device, noise=noise, learn_noise=learn_noise, solve_method=solver, cg_tolerance=cg_tolerance)
 
+    # Setup optimizer for hyperparameters
     def filter_param(named_params, name):
-        params = []
-        for n, param in named_params:
-            if n == name:
-                continue
-            params += [param]
-        return params
-    
+        return [param for n, param in named_params if n != name]
     if learn_noise:
         params = model.parameters()
     else:
         params = filter_param(model.named_parameters(), "likelihood.noise_covar.raw_noise")
-
-    # params = [
-    #     {"params": model.inducing_points, "lr": 0.02},
-    #     {"params": model.kernel.raw_lengthscale, "lr": 0.005},
-    # ]
-    # optimizer = torch.optim.Adam(params)
     optimizer = torch.optim.Adam(params, lr=lr)
 
     # Training loop
@@ -405,16 +442,19 @@ def train_gp(
         t1 = time.perf_counter()
         neg_mlls = []
         for x_batch, y_batch in train_loader:
+            # Load batch
             x_batch = x_batch.clone().detach().to(dtype=dtype, device=device)
             y_batch = y_batch.clone().detach().to(dtype=dtype, device=device)
             
+            # Perform optimization
             optimizer.zero_grad()
             with gpytorch.settings.max_root_decomposition_size(100), max_cholesky_size(int(1.e7)):
-                neg_mll = -model.mll(inducing_points, x_batch, y_batch)
+                neg_mll = -model.mll(x_batch, y_batch)
             neg_mlls += [-neg_mll.item()]
             neg_mll.backward()
             optimizer.step()
 
+            # Log
             pbar.set_description(f"Epoch {epoch+1}/{epochs}")
             pbar.set_postfix(MLL=f"{-neg_mll.item()}")
         t2 = time.perf_counter()
@@ -445,9 +485,8 @@ def train_gp(
         if watch:
             wandb.log({
                 "loss": torch.tensor(neg_mlls).mean(),
-                "noise": model.mll_noise.cpu(),
+                "noise": model.noise.cpu(),
                 "lengthscale": model.kernel.lengthscale.cpu(),
-                # "shear_strength": model.shear_strength.cpu(),
                 "test_rmse": test_rmse,
                 "neg_mll": neg_mll,
                 "nll": nll,
@@ -456,12 +495,12 @@ def train_gp(
             })
 
     if trace:
-        np.savez(f"./figures/trace/{dataset_name}_secgp_covmats.npz", *cov_mats)
+        np.savez(f"./figures/trace/{dataset_name}_softgp_covmats.npz", *cov_mats)
 
     return model
 
 
-def eval_gp(model, test_dataset, device="cuda:0"):
+def eval_gp(model: SoftGP, test_dataset: Dataset, device="cuda:0") -> float:
     preds = []
     test_loader = DataLoader(test_dataset, batch_size=1024, shuffle=False)
     for x_batch, y_batch in tqdm(test_loader):
@@ -473,8 +512,8 @@ def eval_gp(model, test_dataset, device="cuda:0"):
     else:
         base_kernel_lengthscale = model.kernel.lengthscale.cpu()
         
-    print("RMSE:", rmse, "NOISE", model.mll_noise.cpu().item(), "LENGTHSCALE", base_kernel_lengthscale)
-    return rmse, 0
+    print("RMSE:", rmse, "NOISE", model.noise.cpu().item(), "LENGTHSCALE", base_kernel_lengthscale)
+    return rmse
 
 
 if __name__ == "__main__":

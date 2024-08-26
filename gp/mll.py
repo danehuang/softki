@@ -6,11 +6,9 @@ from linear_solver.preconditioner import _default_preconditioner
 
 
 class HutchinsonPseudoLoss:
-    def __init__(self, model, cg_iters=50, cg_tolerance=1e-5, num_trace_samples=10):
+    def __init__(self, model, num_trace_samples=10):
         self.model = model
         self.x0 = None
-        self.cg_iters = cg_iters
-        self.cg_tolerance = cg_tolerance
         self.num_trace_samples = num_trace_samples
 
     def update_x0(self, full_rhs):
@@ -32,10 +30,10 @@ class HutchinsonPseudoLoss:
         
         x0 = self.update_x0(full_rhs)
         result = self.model._solve_system(
-            kxx=kxx,
+            kxx,
+            full_rhs,
             x0=x0,
             forwards_matmul=forwards_matmul,
-            full_rhs=full_rhs,
             precond=precond
         )
         
