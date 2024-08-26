@@ -9,7 +9,7 @@ conda create --name softgp python=3.12
 
 pip install torch torchvision torchaudio
 pip install tqdm requests wandb
-pip install scipy scikit-learn pandas matplotlib
+pip install scipy scikit-learn pandas matplotlib omegaconf
 pip install gpytorch 
 pip install -e .
 ```
