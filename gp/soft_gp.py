@@ -32,10 +32,10 @@ class SoftGP(torch.nn.Module):
         device="cpu",
         dtype=torch.float32,
         solver="solve",
-        mll_approx="hutchinson",
-        fit_chunk_size=1024,
         max_cg_iter=50,
         cg_tolerance=0.5,
+        mll_approx="hutchinson",
+        fit_chunk_size=1024,
     ) -> None:
         # Argument checking 
         methods = ["solve", "cholesky", "cg"]

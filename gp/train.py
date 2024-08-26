@@ -55,7 +55,7 @@ def dynamic_instantiation(config: DictConfig) -> Any:
 
 def train_gp(dataset_name: str, train_dataset: Dataset, test_dataset: Dataset, config: DictConfig) -> SoftGP:
     # Unpack model configuration
-    kernel, num_inducing, dtype, device, noise, learn_noise, solver, cg_tolerance = (
+    kernel, num_inducing, dtype, device, noise, learn_noise, solver, cg_tolerance, mll_approx, fit_chunk_size = (
         dynamic_instantiation(config.model.kernel),
         config.model.num_inducing,
         getattr(torch, config.model.dtype),
@@ -64,6 +64,8 @@ def train_gp(dataset_name: str, train_dataset: Dataset, test_dataset: Dataset, c
         config.model.learn_noise,
         config.model.solver,
         config.model.cg_tolerance,
+        config.model.mll_approx,
+        config.model.fit_chunk_size,
     )
 
     # Unpack training configuration
@@ -95,7 +97,7 @@ def train_gp(dataset_name: str, train_dataset: Dataset, test_dataset: Dataset, c
     inducing_points = torch.tensor(centers).to(dtype=dtype, device=device)
     
     # Setup model
-    model = SoftGP(kernel, inducing_points, dtype=dtype, device=device, noise=noise, learn_noise=learn_noise, solver=solver, cg_tolerance=cg_tolerance)
+    model = SoftGP(kernel, inducing_points, dtype=dtype, device=device, noise=noise, learn_noise=learn_noise, solver=solver, cg_tolerance=cg_tolerance, mll_approx=mll_approx, fit_chunk_size=fit_chunk_size)
 
     # Setup optimizer for hyperparameters
     def filter_param(named_params, name):
@@ -191,6 +193,8 @@ if __name__ == "__main__":
             'learn_noise': False,
             'solver': 'solve',
             'cg_tolerance': 1e-5,
+            'mll_approx': 'hutchinson',
+            'fit_chunk_size': 1024,
             'dtype': 'float32',
             'device': 'cpu',
         },
