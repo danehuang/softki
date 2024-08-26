@@ -129,7 +129,6 @@ def train_gp(dataset_name: str, train_dataset: Dataset, test_dataset: Dataset, c
     # Training loop
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     pbar = tqdm(range(epochs), desc="Optimizing MLL")
-    cov_mats = []
     for epoch in pbar:
         t1 = time.perf_counter()
         neg_mlls = []
@@ -200,6 +199,7 @@ if __name__ == "__main__":
     elevators_dataset = ElevatorsDataset("../data/uci_datasets/uci_datasets/elevators/data.csv")
     train_dataset, val_dataset, test_dataset = split_dataset(elevators_dataset)
 
+    # Create config
     config = OmegaConf.create({
         'model': {
             'name': 'soft-gp',
