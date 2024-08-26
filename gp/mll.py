@@ -5,6 +5,11 @@ import torch
 from linear_solver.preconditioner import _default_preconditioner
 
 
+"""
+Copyright (c) 2022, Wesley Maddox, Andres Potapczynski, Andrew Gordon Wilson
+All rights reserved.
+"""
+
 class HutchinsonPseudoLoss:
     def __init__(self, model, num_trace_samples=10):
         self.model = model
