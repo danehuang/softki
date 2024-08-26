@@ -18,7 +18,10 @@ class HutchinsonPseudoLoss:
     def forward(self, mean, cov_mat, target, *params):
         function_dist = MultivariateNormal(mean, cov_mat)
         
-        full_rhs, probe_vectors = self.get_rhs_and_probes(rhs=target - function_dist.mean, num_random_probes=self.num_trace_samples)
+        full_rhs, probe_vectors = self.get_rhs_and_probes(
+            rhs=target - function_dist.mean,
+            num_random_probes=self.num_trace_samples
+        )
         kxx = function_dist.lazy_covariance_matrix.evaluate_kernel()
 
         # Cholesky Woodbury matrix preconditioner
@@ -38,17 +41,9 @@ class HutchinsonPseudoLoss:
         )
         
         self.x0 = result.clone()
-        
-        pseudo_loss = self.compute_pseudo_loss(
-            forwards_matmul=forwards_matmul,
-            solve=result,
-            probe_vectors=probe_vectors,
-            function_dist=function_dist,
-            params=params
-        )
-        return pseudo_loss
+        return self.compute_pseudo_loss(forwards_matmul, result, probe_vectors, function_dist)
 
-    def compute_pseudo_loss(self, forwards_matmul, solve, probe_vectors, function_dist, params):
+    def compute_pseudo_loss(self, forwards_matmul, solve, probe_vectors, function_dist):
         data_solve = solve[..., 0].unsqueeze(-1).contiguous()
         data_term = (-data_solve * forwards_matmul(data_solve).float()).sum(-2) / 2
         logdet_term = (
