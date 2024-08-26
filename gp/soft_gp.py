@@ -225,7 +225,7 @@ class SoftGP(torch.nn.Module):
             for \alpha where
             1. inducing points z are fixed,
             2. hat{K}_zx = K_zz W_zx, and
-            2. hat{K}_xz = hat{K}_zx^T.
+            3. hat{K}_xz = hat{K}_zx^T.
 
         Args:
             X (torch.Tensor): N x D tensor of inputs
@@ -241,6 +241,8 @@ class SoftGP(torch.nn.Module):
         K_zz = self._mk_cov(self.inducing_points)
 
         # Construct A and b for linear solve
+        #   A = (K_zz + hat{K}_zx @ noise^{-1} @ hat{K}_xz)
+        #   b = (hat{K}_zx @ noise^{-1}) y
         if X.shape[0] * X.shape[1] <= 32768:
             # Case: "small" X
             # Form estimate \hat{K}_xz ~= W_xz K_zz
@@ -248,9 +250,7 @@ class SoftGP(torch.nn.Module):
             hat_K_xz = W_xz @ K_zz
             hat_K_zx = hat_K_xz.T
             
-            # Note:
-            #   A = K_zz + \hat{K}_zx @ noise^{-1} @ \hat{K}_xz
-            #   b = \hat{K}_zx @ noise^{-1} @ y
+            # Form A and b
             Lambda_inv_diag = (1 / self.noise) * torch.ones(N, dtype=self.dtype).to(self.device)
             A = K_zz + hat_K_zx @ (Lambda_inv_diag.unsqueeze(1) * hat_K_xz)
             b = hat_K_zx @ (Lambda_inv_diag * y)
@@ -273,8 +273,7 @@ class SoftGP(torch.nn.Module):
                 
                 # Compute batches
                 for i in range(batches):
-                    # [Note]:
-                    #   A += W_zx @ Lambda_inv @ W_xz
+                    # Update A: A += W_zx @ Lambda_inv @ W_xz
                     X_batch = X[i*fit_chunk_size:(i+1)*fit_chunk_size]
                     W_xz = self._interp(X_batch)
                     W_zx = W_xz.T
@@ -282,8 +281,7 @@ class SoftGP(torch.nn.Module):
                     torch.matmul(W_zx, tmp1, out=tmp2)
                     A.add_(tmp2)
                     
-                    # [Note]:
-                    #   b += K_zz @ W_zx @ (Lambda_inv @ Y[i*batch_size:(i+1)*batch_size])
+                    # Update b: b += K_zz @ W_zx @ (Lambda_inv @ Y[i*batch_size:(i+1)*batch_size])
                     torch.matmul(Lambda_inv, y[i*fit_chunk_size:(i+1)*fit_chunk_size], out=tmp3)
                     torch.matmul(W_zx, tmp3, out=tmp4)
                     torch.matmul(K_zz, tmp4, out=tmp5)
@@ -301,12 +299,12 @@ class SoftGP(torch.nn.Module):
                 A = K_zz + K_zz @ A @ K_zz
 
         # Safe solve A \alpha = b
-        Q_xx = DenseLinearOperator(A)
+        A = DenseLinearOperator(A)
         self.alpha = self._solve_system(
-            Q_xx,
+            A,
             b.unsqueeze(1),
             x0=torch.zeros_like(b),
-            forwards_matmul=Q_xx.matmul,
+            forwards_matmul=A.matmul,
             precond=None
         )
 
@@ -350,6 +348,14 @@ def flatten_dataset(dataset: Dataset) -> Tuple[torch.Tensor, torch.Tensor]:
     return train_x, train_y
 
 
+def split_dataset(dataset: Dataset, train_frac=4/9, val_frac=3/9) -> Tuple[Dataset, Dataset, Dataset]:
+    train_size = int(len(dataset) * train_frac)
+    val_size = int(len(dataset) * val_frac)
+    test_size = len(dataset) - train_size - val_size
+    train_dataset, val_dataset, test_dataset = random_split(elevators_dataset, [train_size, val_size, test_size])
+    return train_dataset, val_dataset, test_dataset
+
+
 def train_gp(
     dataset_name: str,
     train_dataset: Dataset,
@@ -369,7 +375,7 @@ def train_gp(
     batch_size=1024,
     lr=0.01,
     device="cuda:0",
-    dtype=torch.float64,
+    dtype=torch.float32,
     group="test",
     project="isgp",
     watch=False,
@@ -481,15 +487,15 @@ def train_gp(
                 plt.savefig(f"./figures/trace/{dataset_name}_secgp_induce_{epoch}.png", bbox_inches='tight')
                 plt.close(fig)
 
-        test_rmse, nll = eval_gp(model, test_dataset, device=device)
+        results = eval_gp(model, test_dataset, device=device)
         if watch:
             wandb.log({
                 "loss": torch.tensor(neg_mlls).mean(),
                 "noise": model.noise.cpu(),
                 "lengthscale": model.kernel.lengthscale.cpu(),
-                "test_rmse": test_rmse,
+                "test_rmse": results["rmse"],
                 "neg_mll": neg_mll,
-                "nll": nll,
+                "nll": results["nll"],
                 "epoch_time": t2 - t1,
                 "fit_time": t3 - t2,
             })
@@ -502,30 +508,47 @@ def train_gp(
 
 def eval_gp(model: SoftGP, test_dataset: Dataset, device="cuda:0") -> float:
     preds = []
+    neg_mlls = []
     test_loader = DataLoader(test_dataset, batch_size=1024, shuffle=False)
     for x_batch, y_batch in tqdm(test_loader):
         preds += [(model.pred(x_batch.to(device)) - y_batch.to(device)).detach().cpu()**2]
+        neg_mlls += [-model.mll(x_batch, y_batch)]
     rmse = torch.sqrt(torch.sum(torch.cat(preds)) / len(test_dataset)).item()
+    neg_mll = torch.sum(torch.tensor(neg_mlls))
     
     if isinstance(model.kernel, ScaleKernel):
         base_kernel_lengthscale = model.kernel.base_kernel.lengthscale.cpu()
     else:
         base_kernel_lengthscale = model.kernel.lengthscale.cpu()
         
-    print("RMSE:", rmse, "NOISE", model.noise.cpu().item(), "LENGTHSCALE", base_kernel_lengthscale)
-    return rmse
+    print("RMSE:", rmse, "NEG_MLL", neg_mll.item(), "NOISE", model.noise.cpu().item(), "LENGTHSCALE", base_kernel_lengthscale)
+    return {
+        "rmse": rmse,
+        "nll": neg_mll,
+    }
 
 
 if __name__ == "__main__":
     from data.get_uci import ElevatorsDataset
     
+    # Create dataset
     elevators_dataset = ElevatorsDataset("../data/uci_datasets/uci_datasets/elevators/data.csv")
-    train_size = int(len(elevators_dataset) * 4/9)
-    val_size = int(len(elevators_dataset) * 3/9)
-    test_size = len(elevators_dataset) - train_size - val_size
-    train_dataset, val_dataset, test_dataset = random_split(elevators_dataset, [train_size, val_size, test_size])
+    train_dataset, val_dataset, test_dataset = split_dataset(elevators_dataset)
 
-    # device = "cuda:0"
-    device = "cpu"
-    model = train_gp("elevators", train_dataset, test_dataset, elevators_dataset.dim, kernel="matern", num_inducing=1024, lr=0.01, epochs=50, device=device)
+    # Train
+    device = "cpu"  # device = "cuda:0"
+    model = train_gp(
+        "elevators",
+        train_dataset,
+        test_dataset,
+        elevators_dataset.dim,
+        kernel="matern",
+        num_inducing=1024,
+        lr=0.01,
+        epochs=50,
+        device=device
+    )
+    
+    # Eval
     eval_gp(model, test_dataset, device=device)
+    
