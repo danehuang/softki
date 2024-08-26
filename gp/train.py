@@ -3,7 +3,6 @@ import time
 from typing import *
 
 # Common data science imports
-import matplotlib.pyplot as plt
 import numpy as np
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
@@ -16,7 +15,7 @@ import wandb
 
 # Gpytorch imports
 import gpytorch
-from gpytorch.kernels import ScaleKernel, RBFKernel, MaternKernel
+from gpytorch.kernels import ScaleKernel
 from linear_operator.settings import max_cholesky_size
 
 # Our imports
@@ -97,7 +96,18 @@ def train_gp(dataset_name: str, train_dataset: Dataset, test_dataset: Dataset, c
     inducing_points = torch.tensor(centers).to(dtype=dtype, device=device)
     
     # Setup model
-    model = SoftGP(kernel, inducing_points, dtype=dtype, device=device, noise=noise, learn_noise=learn_noise, solver=solver, cg_tolerance=cg_tolerance, mll_approx=mll_approx, fit_chunk_size=fit_chunk_size)
+    model = SoftGP(
+        kernel,
+        inducing_points,
+        dtype=dtype,
+        device=device,
+        noise=noise,
+        learn_noise=learn_noise,
+        solver=solver,
+        cg_tolerance=cg_tolerance,
+        mll_approx=mll_approx,
+        fit_chunk_size=fit_chunk_size
+    )
 
     # Setup optimizer for hyperparameters
     def filter_param(named_params, name):
