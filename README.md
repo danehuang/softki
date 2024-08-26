@@ -26,5 +26,5 @@ python get_uci.py
 
 ```
 cd gp
-python soft_gp.py
+python train.py
 ```
