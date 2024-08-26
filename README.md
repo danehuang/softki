@@ -21,3 +21,10 @@ pip install -e .
 cd data
 python get_uci.py
 ```
+
+## Run
+
+```
+cd gp
+python soft_gp.py
+```
