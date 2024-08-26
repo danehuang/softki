@@ -31,7 +31,7 @@ class SoftGP(torch.nn.Module):
         learn_noise=False,
         device="cpu",
         dtype=torch.float32,
-        solve_method="solve",
+        solver="solve",
         mll_approx="hutchinson",
         fit_chunk_size=1024,
         max_cg_iter=50,
@@ -39,8 +39,8 @@ class SoftGP(torch.nn.Module):
     ) -> None:
         # Argument checking 
         methods = ["solve", "cholesky", "cg"]
-        if not solve_method in methods:
-            raise ValueError(f"Method {solve_method} should be in {methods} ...")
+        if not solver in methods:
+            raise ValueError(f"Method {solver} should be in {methods} ...")
         
         # Check devices
         devices = ["cpu"]
@@ -59,7 +59,7 @@ class SoftGP(torch.nn.Module):
         self.dtype = dtype
         
         # Mll approximation settings
-        self.solve_method = solve_method
+        self.solve_method = solver
         self.mll_approx = mll_approx
         self.fit_chunk_size = fit_chunk_size
 

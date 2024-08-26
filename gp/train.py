@@ -5,6 +5,8 @@ from typing import *
 # Common data science imports
 import matplotlib.pyplot as plt
 import numpy as np
+from omegaconf import OmegaConf
+from omegaconf.dictconfig import DictConfig
 from sklearn.cluster import KMeans
 from tqdm import tqdm
 import torch
@@ -45,56 +47,45 @@ def split_dataset(dataset: Dataset, train_frac=4/9, val_frac=3/9) -> Tuple[Datas
     return train_dataset, val_dataset, test_dataset
 
 
-def train_gp(
-    dataset_name: str,
-    train_dataset: Dataset,
-    test_dataset: Dataset,
-    D: int,
-    seed=42,
-    train_frac=4/9,
-    val_frac=3/9,
-    kernel="matern",
-    interp_type="softmax",
-    noise=1e-3,
-    learn_noise=False,
-    num_inducing=1024,
-    solver="solve",
-    cg_tolerance=1e-5,
-    epochs=50,
-    batch_size=1024,
-    lr=0.01,
-    device="cuda:0",
-    dtype=torch.float32,
-    group="test",
-    project="isgp",
-    watch=False,
-    trace=False,
-):
-    if watch:
-        config = {
-            "model": "softgp",
-            "dataset_name": dataset_name,
-            "dim": D,
-            "dtype": dtype,
-            "device": device,
-            "num_inducing": num_inducing,
-            "batch_size": batch_size,
-            "lr": lr,
-            "epochs": epochs,
-            "learn_noise": learn_noise,
-            "kernel": kernel,
-            "interp_type": interp_type,
-            "train_frac": train_frac,
-            "val_frac": val_frac,
-            "seed": seed,
-            "solver": solver,
-            "cg_tolerance": cg_tolerance,
-        }
-        rname = f"softgp{dataset_name}_{interp_type}_{solver}_{dtype}_{num_inducing}_{batch_size}_{noise}"
-        wandb.init(project=project, entity="bogp", group=group, name=rname, config=config)
+def dynamic_instantiation(config: DictConfig) -> Any:
+    # Instantiate the class using OmegaConf
+    target_class = globals()[config['_target_']]  # Get the class from the globals() dictionary
+    return target_class(**{k: v for k, v in config.items() if k != '_target_'})
+
+
+def train_gp(dataset_name: str, train_dataset: Dataset, test_dataset: Dataset, config: DictConfig) -> SoftGP:
+    # Unpack model configuration
+    kernel, num_inducing, dtype, device, noise, learn_noise, solver, cg_tolerance = (
+        dynamic_instantiation(config.model.kernel),
+        config.model.num_inducing,
+        getattr(torch, config.model.dtype),
+        config.model.device,
+        config.model.noise,
+        config.model.learn_noise,
+        config.model.solver,
+        config.model.cg_tolerance,
+    )
+
+    # Unpack training configuration
+    seed, batch_size, epochs, lr = (
+        config.training.seed,
+        config.training.batch_size,
+        config.training.epochs,
+        config.training.learning_rate,
+    )
+
+    # Set name
+    if config.wandb.watch:
+        config_dict = OmegaConf.to_container(config, resolve=True)
+        wandb_config = {
+            "model": "softgp",    
+        }.update(config_dict)
+        rname = f"softgp{dataset_name}_{config.model.solver}_{dtype}_{num_inducing}_{batch_size}_{noise}"
+        wandb.init(project=config.wandb.project, entity="bogp", group=config.wandb.group, name=rname, config=wandb_config)
 
     # Set seed
     np.random.seed(seed)
+    torch.manual_seed(seed)
 
     # Initialize inducing points with kmeans
     train_features, train_labels = flatten_dataset(train_dataset)
@@ -103,22 +94,8 @@ def train_gp(
     centers = kmeans.cluster_centers_
     inducing_points = torch.tensor(centers).to(dtype=dtype, device=device)
     
-    # Setup kernel
-    if kernel == "rbf":
-        k = RBFKernel()
-    elif kernel == "rbf-ard":
-        k = RBFKernel(ard_num_dims=D)
-    elif kernel == "matern":
-        k = MaternKernel(nu=1.5)
-    elif kernel == "matern_ard":
-        k = MaternKernel(nu=1.5, ard_num_dims=train_features.shape[-1], lengthscale_prior=gpytorch.priors.GammaPrior(3.0, 6.0))
-    elif kernel == "matern0.5":
-        k = MaternKernel(nu=0.5)
-    else:
-        raise ValueError(f"Kernel {kernel} not supported ...")
-    
     # Setup model
-    model = SoftGP(k, inducing_points, dtype=dtype, device=device, noise=noise, learn_noise=learn_noise, solve_method=solver, cg_tolerance=cg_tolerance)
+    model = SoftGP(kernel, inducing_points, dtype=dtype, device=device, noise=noise, learn_noise=learn_noise, solver=solver, cg_tolerance=cg_tolerance)
 
     # Setup optimizer for hyperparameters
     def filter_param(named_params, name):
@@ -157,40 +134,18 @@ def train_gp(
         model.fit(train_features, train_labels)
         t3 = time.perf_counter()
 
-        if trace:
-            K_zz = model._mk_cov(model.inducing_points)
-            W_xz = model._interp(train_features[:64].to(dtype=dtype, device=device))
-            cov_mat = W_xz @ K_zz @ W_xz.T 
-            if epoch % 10 == 0 or epoch == epochs - 1:
-                cov_mats += [cov_mat.detach().cpu().numpy()]
-                fig = plt.figure()
-                plt.imshow(np.log(cov_mats[-1]), cmap='viridis', vmin=-10, vmax=0)
-                plt.colorbar()
-                plt.axis('off')
-                plt.savefig(f"./figures/trace/{dataset_name}_secgp_{epoch}.png", bbox_inches='tight')
-                plt.close(fig)
-                
-                fig = plt.figure()
-                plt.imshow(np.log(model.inducing_points.detach().cpu().numpy().transpose()), cmap='viridis')
-                plt.colorbar()
-                plt.savefig(f"./figures/trace/{dataset_name}_secgp_induce_{epoch}.png", bbox_inches='tight')
-                plt.close(fig)
-
         results = eval_gp(model, test_dataset, device=device)
-        if watch:
+        if config.wandb.watch:
             wandb.log({
                 "loss": torch.tensor(neg_mlls).mean(),
-                "noise": model.noise.cpu(),
-                "lengthscale": model.kernel.lengthscale.cpu(),
-                "test_rmse": results["rmse"],
                 "neg_mll": neg_mll,
-                "nll": results["nll"],
+                "test_rmse": results["rmse"],
+                "test_nll": results["nll"],
                 "epoch_time": t2 - t1,
                 "fit_time": t3 - t2,
+                "noise": model.noise.cpu(),
+                "lengthscale": model.kernel.lengthscale.cpu(),
             })
-
-    if trace:
-        np.savez(f"./figures/trace/{dataset_name}_softgp_covmats.npz", *cov_mats)
 
     return model
 
@@ -225,19 +180,35 @@ if __name__ == "__main__":
     elevators_dataset = ElevatorsDataset("../data/uci_datasets/uci_datasets/elevators/data.csv")
     train_dataset, val_dataset, test_dataset = split_dataset(elevators_dataset)
 
+    config = OmegaConf.create({
+        'model': {
+            'name': 'soft-gp',
+            'kernel': {
+                '_target_': 'RBFKernel'
+            },
+            'num_inducing': 1024,
+            'noise': 1e-3,
+            'learn_noise': False,
+            'solver': 'solve',
+            'cg_tolerance': 1e-5,
+            'dtype': 'float32',
+            'device': 'cpu',
+        },
+        'training': {
+            'seed': 42,
+            'batch_size': 1024,
+            'learning_rate': 0.01,
+            'epochs': 50,
+        },
+        'wandb': {
+            'watch': False,
+            'group': 'test',
+            'project': 'soft-gp',
+        }
+    })
+
     # Train
-    device = "cpu"  # device = "cuda:0"
-    model = train_gp(
-        "elevators",
-        train_dataset,
-        test_dataset,
-        elevators_dataset.dim,
-        kernel="matern",
-        num_inducing=1024,
-        lr=0.01,
-        epochs=50,
-        device=device
-    )
+    model = train_gp("elevators", train_dataset, test_dataset, config)
     
     # Eval
-    eval_gp(model, test_dataset, device=device)
+    eval_gp(model, test_dataset, device=config.model.device)
