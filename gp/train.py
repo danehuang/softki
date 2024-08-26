@@ -15,7 +15,7 @@ import wandb
 
 # Gpytorch imports
 import gpytorch
-from gpytorch.kernels import ScaleKernel
+from gpytorch.kernels import ScaleKernel, RBFKernel
 from linear_operator.settings import max_cholesky_size
 
 # Our imports
@@ -25,6 +25,10 @@ from gp.soft_gp import SoftGP
 # =============================================================================
 # Train and Evaluate
 # =============================================================================
+
+# ---------------------------------------------------------
+# Helper
+# ---------------------------------------------------------
 
 def flatten_dataset(dataset: Dataset) -> Tuple[torch.Tensor, torch.Tensor]:
     train_loader = DataLoader(dataset, batch_size=1024, shuffle=False)
@@ -51,6 +55,10 @@ def dynamic_instantiation(config: DictConfig) -> Any:
     target_class = globals()[config['_target_']]  # Get the class from the globals() dictionary
     return target_class(**{k: v for k, v in config.items() if k != '_target_'})
 
+
+# ---------------------------------------------------------
+# Train/Eval
+# ---------------------------------------------------------
 
 def train_gp(dataset_name: str, train_dataset: Dataset, test_dataset: Dataset, config: DictConfig) -> SoftGP:
     # Unpack model configuration
