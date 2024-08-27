@@ -7,8 +7,8 @@ DATASETS=(pol elevators bike kin40k protein keggdirected slice keggundirected 3d
 
 GROUP=benchmark
 EPOCHS=50
-LEARNING_RATE=0.01
-NUM_INDUCING=512
+LEARNING_RATE=0.1
+NUM_INDUCING=1024
 DEVICE="cuda:0"
 
 if $DEBUG; then
@@ -24,7 +24,7 @@ do
         --data_dir $DATA_DIR \
         --dataset.name $dataset \
         --training.epochs $EPOCHS \
-        --training.learning_rate $LEARNING_RATE \
+        --training.learning_rate 0.01 \
         --wandb.group $GROUP
 
     python train.py \
@@ -34,7 +34,7 @@ do
         --data_dir $DATA_DIR \
         --dataset.name $dataset \
         --training.epochs $EPOCHS \
-        --training.learning_rate $LEARNING_RATE \
+        --training.learning_rate 0.01 \
         --wandb.group $GROUP
 
     python train.py \
@@ -44,6 +44,6 @@ do
         --data_dir $DATA_DIR \
         --dataset.name $dataset \
         --training.epochs $EPOCHS \
-        --training.learning_rate 0.01 \
+        --training.learning_rate .1 \
         --wandb.group $GROUP
 done

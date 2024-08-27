@@ -29,7 +29,7 @@ from gpytorch.kernels import ScaleKernel, RBFKernel
 from linear_operator.settings import max_cholesky_size
 
 # Our imports
-from gp.soft_gp import SoftGP
+from gp.soft_gp.soft_gp import SoftGP
 from gp.util import dynamic_instantiation, flatten_dict, unflatten_dict, flatten_dataset, split_dataset, filter_param, heatmap
 
 
@@ -251,7 +251,7 @@ if __name__ == "__main__":
 
     # Omega config to argparse
     parser = argparse.ArgumentParser(description="Example of converting OmegaConf to argparse")
-    parser.add_argument("--data_dir", type=str, default="../data/uci_datasets/uci_datasets")
+    parser.add_argument("--data_dir", type=str, default="../../data/uci_datasets/uci_datasets")
     for key, value in flatten_dict(OmegaConf.to_container(CONFIG, resolve=True)).items():
         arg_type = type(value)  # Infer the type from the configuration
         parser.add_argument(f'--{key}', type=arg_type, default=value, help=f'Default: {value}')

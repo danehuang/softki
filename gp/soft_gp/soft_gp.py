@@ -14,7 +14,7 @@ from linear_operator.operators.dense_linear_operator import DenseLinearOperator
 from linear_operator.utils.cholesky import psd_safe_cholesky
 
 # Our imports
-from gp.mll import HutchinsonPseudoLoss
+from gp.soft_gp.mll import HutchinsonPseudoLoss
 from linear_solver.cg import linear_cg
 
 
