@@ -1,5 +1,11 @@
 from typing import *
 
+from io import BytesIO
+from PIL import Image
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
 
@@ -83,3 +89,18 @@ def dynamic_instantiation(config: DictConfig | dict) -> Any:
 
 def flatten_omegaconf(cfg: dict, parent_key='', separator='.'):
     return flatten_dict(OmegaConf.to_container(cfg, resolve=True), parent_key=parent_key, separator=separator)
+
+
+# ---------------------------------------------------------
+# Heatmap
+# ---------------------------------------------------------
+
+def heatmap(matrix, eps=1e-12):
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(np.log(matrix + eps), cmap="viridis", annot=False)
+    img_stream = BytesIO()
+    plt.savefig(img_stream, format='png')
+    plt.close()
+    img_stream.seek(0)
+    img = Image.open(img_stream)
+    return img

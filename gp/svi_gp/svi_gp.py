@@ -20,7 +20,7 @@ from gpytorch.variational import CholeskyVariationalDistribution
 from gpytorch.variational import VariationalStrategy
 from gpytorch.kernels import ScaleKernel, RBFKernel, MaternKernel
 
-from gp.util import dynamic_instantiation, flatten_dict, unflatten_dict, flatten_dataset, split_dataset, filter_param
+from gp.util import dynamic_instantiation, flatten_dict, unflatten_dict, flatten_dataset, split_dataset, filter_param, heatmap
 
 
 # =============================================================================
@@ -169,13 +169,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
                 z = model.variational_strategy.inducing_points
                 K_zz = model.covar_module(z).evaluate()
                 K_zz = K_zz.detach().cpu().numpy()
-                plt.figure(figsize=(8, 6))
-                sns.heatmap(np.log(K_zz), cmap="viridis", annot=False)
-                img_stream = BytesIO()
-                plt.savefig(img_stream, format='png')
-                plt.close()
-                img_stream.seek(0)
-                img = Image.open(img_stream)
+                img = heatmap(K_zz)
 
                 wandb.log({
                     "inducing_points": wandb.Histogram(z.detach().cpu().numpy()),

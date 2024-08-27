@@ -36,4 +36,14 @@ do
         --training.epochs $EPOCHS \
         --training.learning_rate $LEARNING_RATE \
         --wandb.group $GROUP
+
+    python train.py \
+        --model.name sv-gp \
+        --model.num_inducing $NUM_INDUCING \
+        --model.device $DEVICE \
+        --data_dir $DATA_DIR \
+        --dataset.name $dataset \
+        --training.epochs $EPOCHS \
+        --training.learning_rate 0.01 \
+        --wandb.group $GROUP
 done

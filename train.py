@@ -3,6 +3,7 @@ from omegaconf import OmegaConf
 
 import gp.svi_gp
 import gp.svi_gp.svi_gp
+import gp.sv_gp.sv_gp
 import gp.train
 from gp.util import *
 
@@ -24,7 +25,7 @@ if __name__ == "__main__":
     )
     
     # Create config
-    config = OmegaConf.merge(gp.svi_gp.svi_gp.CONFIG, gp.train.CONFIG)
+    config = OmegaConf.merge(gp.svi_gp.svi_gp.CONFIG, gp.sv_gp.sv_gp.CONFIG, gp.train.CONFIG)
 
     # Omega config to argparse
     parser = argparse.ArgumentParser(description="Example of converting OmegaConf to argparse")
@@ -40,6 +41,8 @@ if __name__ == "__main__":
         train_gp = gp.svi_gp.svi_gp.train_gp
     elif config.model.name == "soft-gp":
         train_gp = gp.train.train_gp
+    elif config.model.name == "sv-gp":
+        train_gp = gp.sv_gp.sv_gp.train_gp
     else:
         raise ValueError(f"Name not found {config.model.name}")
 

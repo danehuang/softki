@@ -30,7 +30,7 @@ from linear_operator.settings import max_cholesky_size
 
 # Our imports
 from gp.soft_gp import SoftGP
-from gp.util import dynamic_instantiation, flatten_dict, unflatten_dict, flatten_dataset, split_dataset, filter_param
+from gp.util import dynamic_instantiation, flatten_dict, unflatten_dict, flatten_dataset, split_dataset, filter_param, heatmap
 
 
 # =============================================================================
@@ -150,7 +150,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
         # Record
         if config.wandb.watch:
             wandb.log({
-                "loss": (-torch.tensor(neg_mlls)).mean(),
+                "loss": torch.tensor(neg_mlls).mean(),
                 "use_pinv": 1 if use_pinv else 0,
                 "test_rmse": results["rmse"],
                 "test_nll": results["nll"],
@@ -162,13 +162,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
 
             if epoch % 10 == 0:
                 K_zz = model._mk_cov(model.inducing_points).detach().cpu().numpy()
-                plt.figure(figsize=(8, 6))
-                sns.heatmap(np.log(K_zz), cmap="viridis", annot=False)
-                img_stream = BytesIO()
-                plt.savefig(img_stream, format='png')
-                plt.close()
-                img_stream.seek(0)
-                img = Image.open(img_stream)
+                img = heatmap(K_zz)
 
                 wandb.log({
                     "inducing_points": wandb.Histogram(model.inducing_points.detach().cpu().numpy()),
