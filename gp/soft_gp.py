@@ -124,7 +124,9 @@ class SoftGP(torch.nn.Module):
         x0: torch.Tensor = None,
         forwards_matmul: Callable = None,
         precond: torch.Tensor = None,
+        return_pinv: bool = False,
     ) -> torch.Tensor:
+        use_pinv = False
         with torch.no_grad():
             try:
                 if self.solve_method == "solve":
@@ -147,9 +149,11 @@ class SoftGP(torch.nn.Module):
             except RuntimeError as e:
                 print("Fallback to pseudoinverse: ", str(e))
                 solve = torch.linalg.pinv(kxx.evaluate()) @ full_rhs
+                use_pinv = True
 
         # Apply torch.nan_to_num to handle NaNs from percision limits 
-        return torch.nan_to_num(solve)
+        solve = torch.nan_to_num(solve)
+        return (solve, use_pinv) if return_pinv else solve
 
     # -----------------------------------------------------
     # Marginal Log Likelihood
@@ -209,7 +213,7 @@ class SoftGP(torch.nn.Module):
     # Fit
     # -----------------------------------------------------
 
-    def fit(self, X: torch.Tensor, y: torch.Tensor) -> None:
+    def fit(self, X: torch.Tensor, y: torch.Tensor) -> bool:
         """Fits a SoftGP to dataset (X, y). That is, solve:
 
                 (hat{K}_zx @ noise^{-1}) y = (K_zz + hat{K}_zx @ noise^{-1} @ hat{K}_xz) \alpha
@@ -222,6 +226,9 @@ class SoftGP(torch.nn.Module):
         Args:
             X (torch.Tensor): N x D tensor of inputs
             y (torch.Tensor): N tensor of outputs
+
+        Returns:
+            bool: Returns true if the pseudoinverse was used, false otherwise.
         """        
         # Prepare inputs
         N = len(X)
@@ -292,16 +299,18 @@ class SoftGP(torch.nn.Module):
 
         # Safe solve A \alpha = b
         A = DenseLinearOperator(A)
-        self.alpha = self._solve_system(
+        self.alpha, use_pinv = self._solve_system(
             A,
             b.unsqueeze(1),
             x0=torch.zeros_like(b),
             forwards_matmul=A.matmul,
-            precond=None
+            precond=None,
+            return_pinv=True
         )
 
         # Store for fast prediction
         self.K_zz_alpha = K_zz @ self.alpha
+        return use_pinv
 
     # -----------------------------------------------------
     # Predict

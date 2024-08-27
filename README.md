@@ -11,6 +11,7 @@ pip install torch torchvision torchaudio
 pip install tqdm requests wandb
 pip install scipy scikit-learn pandas matplotlib omegaconf
 pip install gpytorch 
+pip install seaborn
 pip install -e .
 ```
 

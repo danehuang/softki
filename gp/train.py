@@ -1,5 +1,8 @@
 # System/Library imports
 import argparse
+from io import BytesIO
+from PIL import Image
+import matplotlib.pyplot as plt
 import time
 from typing import *
 
@@ -8,6 +11,7 @@ import numpy as np
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
 from omegaconf.listconfig import ListConfig
+import seaborn as sns
 from sklearn.cluster import KMeans
 from tqdm import tqdm
 import torch
@@ -33,7 +37,7 @@ from gp.soft_gp import SoftGP
 # =============================================================================
 
 # ---------------------------------------------------------
-# Helper
+# Dataset helper
 # ---------------------------------------------------------
 
 def flatten_dataset(dataset: Dataset) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -56,31 +60,33 @@ def split_dataset(dataset: Dataset, train_frac=4/9, val_frac=3/9) -> Tuple[Datas
     return train_dataset, val_dataset, test_dataset
 
 
-def dynamic_instantiation(config: DictConfig) -> Any:
-    # Instantiate the class using OmegaConf
-    target_class = globals()[config['_target_']]  # Get the class from the globals() dictionary
-    return target_class(**{k: v for k, v in config.items() if k != '_target_'})
-
+# ---------------------------------------------------------
+# Parameter helper
+# ---------------------------------------------------------
 
 def filter_param(named_params: list[Tuple[str, torch.nn.Parameter]], name: str) -> list[Tuple[str, torch.nn.Parameter]]:
     return [param for n, param in named_params if n != name]
 
 
-def flatten_omegaconf(cfg, parent_key='', separator='.'):
+# ---------------------------------------------------------
+# Config helpers
+# ---------------------------------------------------------
+
+def flatten_dict(cfg: dict, parent_key='', separator='.') -> dict:
     items = {}
     for key, value in cfg.items():
         new_key = f'{parent_key}{separator}{key}' if parent_key else key
-        if isinstance(value, DictConfig):
-            items.update(flatten_omegaconf(OmegaConf.create(value), new_key, separator=separator))
-        elif isinstance(value, ListConfig):
+        if isinstance(value, dict):
+            items.update(flatten_dict(OmegaConf.create(value), new_key, separator=separator))
+        elif isinstance(value, list):
             for i, item in enumerate(value):
-                items.update(flatten_omegaconf(OmegaConf.create({i: item}), new_key, separator=separator))
+                items.update(flatten_dict(OmegaConf.create({i: item}), new_key, separator=separator))
         else:
             items[new_key] = value
     return items
 
 
-def unflatten_dict(flat_dict):
+def unflatten_dict(flat_dict: dict) -> dict:
     hierarchical_dict = {}
     for key, value in flat_dict.items():
         keys = key.split('.')
@@ -91,6 +97,16 @@ def unflatten_dict(flat_dict):
             d = d[sub_key]
         d[keys[-1]] = value
     return hierarchical_dict
+
+
+def dynamic_instantiation(config: DictConfig | dict) -> Any:
+    # Instantiate the class using OmegaConf
+    target_class = globals()[config['_target_']]  # Get the class from the globals() dictionary
+    return target_class(**{k: v for k, v in config.items() if k != '_target_'})
+
+
+def flatten_omegaconf(cfg: dict, parent_key='', separator='.'):
+    return flatten_dict(OmegaConf.to_container(cfg, resolve=True), parent_key=parent_key, separator=separator)
 
 
 # ---------------------------------------------------------
@@ -123,14 +139,24 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
         config.training.learning_rate,
     )
 
-    # Set name
+    # Set wandb
     if config.wandb.watch:
-        config_dict = OmegaConf.to_container(config, resolve=True)
-        wandb_config = {
-            "model": "softgp",    
-        }.update(config_dict)
-        rname = f"softgp{dataset_name}_{config.model.solver}_{dtype}_{num_inducing}_{batch_size}_{noise}"
-        wandb.init(project=config.wandb.project, entity=config.wandb.entity, group=config.wandb.group, name=rname, config=wandb_config)
+        # Create wandb config with training/model config
+        config_dict = flatten_dict(OmegaConf.to_container(config, resolve=True))
+        wandb_config = {"model": "softgp"}
+        wandb_config.update(config_dict)
+
+        # Create name
+        rname = f"softgp_{dataset_name}_{config.model.solver}_{dtype}_{num_inducing}_{batch_size}_{noise}"
+        
+        # Initialize wandb
+        wandb.init(
+            project=config.wandb.project,
+            entity=config.wandb.entity,
+            group=config.wandb.group,
+            name=rname,
+            config=wandb_config
+        )
 
     # Set seed
     np.random.seed(seed)
@@ -191,7 +217,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
         t2 = time.perf_counter()
 
         # Solve for weights given fixed inducing points
-        model.fit(train_features, train_labels)
+        use_pinv = model.fit(train_features, train_labels)
         t3 = time.perf_counter()
 
         # Evaluated gp
@@ -202,13 +228,29 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
             wandb.log({
                 "loss": torch.tensor(neg_mlls).mean(),
                 "neg_mll": neg_mll,
+                "use_pinv": use_pinv,
                 "test_rmse": results["rmse"],
                 "test_nll": results["nll"],
                 "epoch_time": t2 - t1,
                 "fit_time": t3 - t2,
                 "noise": model.noise.cpu(),
-                "lengthscale": model.kernel.lengthscale.cpu(),
+                "lengthscale": model.kernel.lengthscale.cpu()
             })
+
+            if epoch % 10 == 0:
+                K_zz = model._mk_cov(model.inducing_points).detach().cpu().numpy()
+                plt.figure(figsize=(8, 6))
+                sns.heatmap(np.log(K_zz), cmap="viridis", annot=False)
+                img_stream = BytesIO()
+                plt.savefig(img_stream, format='png')
+                plt.close()
+                img_stream.seek(0)
+                img = Image.open(img_stream)
+
+                wandb.log({
+                    "inducing_points": wandb.Histogram(model.inducing_points.detach().cpu().numpy()),
+                    "K_zz": wandb.Image(img)
+                })
 
     return model
 
@@ -291,7 +333,7 @@ if __name__ == "__main__":
     # Omega config to argparse
     parser = argparse.ArgumentParser(description="Example of converting OmegaConf to argparse")
     parser.add_argument("--data_dir", type=str, default="../data/uci_datasets/uci_datasets")
-    for key, value in flatten_omegaconf(config).items():
+    for key, value in flatten_dict(OmegaConf.to_container(config, resolve=True)).items():
         arg_type = type(value)  # Infer the type from the configuration
         parser.add_argument(f'--{key}', type=arg_type, default=value, help=f'Default: {value}')
     args = parser.parse_args()
