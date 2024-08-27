@@ -1,4 +1,5 @@
 # System/Library imports
+import argparse
 import time
 from typing import *
 
@@ -6,12 +7,17 @@ from typing import *
 import numpy as np
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
+from omegaconf.listconfig import ListConfig
 from sklearn.cluster import KMeans
 from tqdm import tqdm
 import torch
 from torch.utils.data import random_split, DataLoader, Dataset
 
-import wandb
+# For logging
+try:
+    import wandb
+except:
+    pass
 
 # Gpytorch imports
 import gpytorch
@@ -46,7 +52,7 @@ def split_dataset(dataset: Dataset, train_frac=4/9, val_frac=3/9) -> Tuple[Datas
     train_size = int(len(dataset) * train_frac)
     val_size = int(len(dataset) * val_frac)
     test_size = len(dataset) - train_size - val_size
-    train_dataset, val_dataset, test_dataset = random_split(elevators_dataset, [train_size, val_size, test_size])
+    train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
     return train_dataset, val_dataset, test_dataset
 
 
@@ -60,11 +66,41 @@ def filter_param(named_params: list[Tuple[str, torch.nn.Parameter]], name: str) 
     return [param for n, param in named_params if n != name]
 
 
+def flatten_omegaconf(cfg, parent_key='', separator='.'):
+    items = {}
+    for key, value in cfg.items():
+        new_key = f'{parent_key}{separator}{key}' if parent_key else key
+        if isinstance(value, DictConfig):
+            items.update(flatten_omegaconf(OmegaConf.create(value), new_key, separator=separator))
+        elif isinstance(value, ListConfig):
+            for i, item in enumerate(value):
+                items.update(flatten_omegaconf(OmegaConf.create({i: item}), new_key, separator=separator))
+        else:
+            items[new_key] = value
+    return items
+
+
+def unflatten_dict(flat_dict):
+    hierarchical_dict = {}
+    for key, value in flat_dict.items():
+        keys = key.split('.')
+        d = hierarchical_dict
+        for sub_key in keys[:-1]:
+            if sub_key not in d:
+                d[sub_key] = {}
+            d = d[sub_key]
+        d[keys[-1]] = value
+    return hierarchical_dict
+
+
 # ---------------------------------------------------------
 # Train/Eval
 # ---------------------------------------------------------
 
-def train_gp(dataset_name: str, train_dataset: Dataset, test_dataset: Dataset, config: DictConfig) -> SoftGP:
+def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) -> SoftGP:
+    # Unpack dataset
+    dataset_name = config.dataset.name
+
     # Unpack model configuration
     kernel, num_inducing, dtype, device, noise, learn_noise, solver, cg_tolerance, mll_approx, fit_chunk_size = (
         dynamic_instantiation(config.model.kernel),
@@ -94,7 +130,7 @@ def train_gp(dataset_name: str, train_dataset: Dataset, test_dataset: Dataset, c
             "model": "softgp",    
         }.update(config_dict)
         rname = f"softgp{dataset_name}_{config.model.solver}_{dtype}_{num_inducing}_{batch_size}_{noise}"
-        wandb.init(project=config.wandb.project, entity="bogp", group=config.wandb.group, name=rname, config=wandb_config)
+        wandb.init(project=config.wandb.project, entity=config.wandb.entity, group=config.wandb.group, name=rname, config=wandb_config)
 
     # Set seed
     np.random.seed(seed)
@@ -201,12 +237,21 @@ def eval_gp(model: SoftGP, test_dataset: Dataset, device="cuda:0") -> float:
 
 
 if __name__ == "__main__":
-    from data.get_uci import ElevatorsDataset
+    from data.get_uci import (
+        PoleteleDataset,
+        ElevatorsDataset,
+        BikeDataset,
+        Kin40KDataset,
+        ProteinDataset,
+        KeggDirectedDataset,
+        CTSlicesDataset,
+        KeggUndirectedDataset,
+        RoadDataset,
+        SongDataset,
+        BuzzDataset,
+        HouseElectricDataset,
+    )
     
-    # Create dataset
-    elevators_dataset = ElevatorsDataset("../data/uci_datasets/uci_datasets/elevators/data.csv")
-    train_dataset, val_dataset, test_dataset = split_dataset(elevators_dataset)
-
     # Create config
     config = OmegaConf.create({
         'model': {
@@ -224,6 +269,11 @@ if __name__ == "__main__":
             'dtype': 'float32',
             'device': 'cpu',
         },
+        'dataset': {
+            'name': 'elevators',
+            'train_frac': 4/9,
+            'val_frac': 3/9,
+        },
         'training': {
             'seed': 42,
             'batch_size': 1024,
@@ -231,14 +281,58 @@ if __name__ == "__main__":
             'epochs': 50,
         },
         'wandb': {
-            'watch': False,
+            'watch': True,
             'group': 'test',
-            'project': 'soft-gp',
+            'entity': 'bogp',
+            'project': 'soft-gp-2',
         }
     })
 
+    # Omega config to argparse
+    parser = argparse.ArgumentParser(description="Example of converting OmegaConf to argparse")
+    parser.add_argument("--data_dir", type=str, default="../data/uci_datasets/uci_datasets")
+    for key, value in flatten_omegaconf(config).items():
+        arg_type = type(value)  # Infer the type from the configuration
+        parser.add_argument(f'--{key}', type=arg_type, default=value, help=f'Default: {value}')
+    args = parser.parse_args()
+    cli_config = OmegaConf.create(unflatten_dict(vars(args)))
+    config = OmegaConf.merge(config, cli_config)
+
+    # Create dataset
+    if config.dataset.name == "poletele":
+        dataset = PoleteleDataset(f"{args.data_dir}/pol/data.csv")
+    elif config.dataset.name == "elevators":
+        dataset = ElevatorsDataset(f"{args.data_dir}/elevators/data.csv")
+    elif config.dataset.name == "bike":
+        dataset = BikeDataset(f"{args.data_dir}/bike/data.csv")
+    elif config.dataset.name == "kin40k":
+        dataset = Kin40KDataset(f"{args.data_dir}/kin40k/data.csv")
+    elif config.dataset.name == "protein":
+        dataset = ProteinDataset(f"{args.data_dir}/protein/data.csv")
+    elif config.dataset.name == "keggdirected":
+        dataset = KeggDirectedDataset(f"{args.data_dir}/keggdirected/data.csv")
+    elif config.dataset.name == "slice":
+        dataset = CTSlicesDataset(f"{args.data_dir}/slice/data.csv")
+    elif config.dataset.name == "keggundirected":
+        dataset = KeggUndirectedDataset(f"{args.data_dir}/keggundirected/data.csv")
+    elif config.dataset.name == "road":
+        dataset = RoadDataset(f"{args.data_dir}/road/data.csv")
+    elif config.dataset.name == "song":
+        dataset = SongDataset(f"{args.data_dir}/song/data.csv")
+    elif config.dataset.name == "buzz":
+        dataset = BuzzDataset(f"{args.data_dir}/buzz/data.csv")
+    elif config.dataset.name == "houseelectric":
+        dataset = HouseElectricDataset(f"{args.data_dir}/houseelectric/data.csv")
+    else:
+        raise ValueError(f"Dataset {config.dataset.name} not supported ...")
+    train_dataset, val_dataset, test_dataset = split_dataset(
+        dataset,
+        train_frac=config.dataset.train_frac,
+        val_frac=config.dataset.val_frac
+    )
+
     # Train
-    model = train_gp("elevators", train_dataset, test_dataset, config)
+    model = train_gp(config, train_dataset, test_dataset)
     
     # Eval
     eval_gp(model, test_dataset, device=config.model.device)
