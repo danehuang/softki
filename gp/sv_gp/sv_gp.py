@@ -1,24 +1,31 @@
-from io import BytesIO
-from PIL import Image
+# System/Library imports
 from typing import *
 import time
-import matplotlib.pyplot as plt
-import numpy as np
-import seaborn as sns
 
+# Common data science imports
+from omegaconf import OmegaConf
+import torch
+from torch.utils.data import Dataset, DataLoader, random_split
+from tqdm import tqdm
+
+try:
+    import wandb
+except:
+    pass
+
+# GPytorch
 import gpytorch
 from gpytorch.means import ConstantMean
 from gpytorch.kernels import ScaleKernel, RBFKernel, MaternKernel, InducingPointKernel
 from gpytorch.distributions import MultivariateNormal
-import torch
-from torch.utils.data import Dataset, DataLoader, random_split
-from tqdm import tqdm
-import wandb
 
-from omegaconf import OmegaConf
-
+# Our imports
 from gp.util import dynamic_instantiation, flatten_dict, unflatten_dict, flatten_dataset, split_dataset, filter_param, heatmap
 
+
+# =============================================================================
+# Variational GP
+# =============================================================================
 
 class SGPRModel(gpytorch.models.ExactGP):
     """
@@ -40,6 +47,10 @@ class SGPRModel(gpytorch.models.ExactGP):
         covar_x = self.covar_module(x)
         return MultivariateNormal(mean_x, covar_x)
     
+
+# =============================================================================
+# Train / Eval
+# =============================================================================
 
 def train_gp(config, train_dataset, test_dataset):
     # Unpack dataset

@@ -1,25 +1,27 @@
-from io import BytesIO
-from PIL import Image
+# System/Library imports
 from typing import *
 import time
-from torch.utils.data import DataLoader, random_split, Dataset
-import torch
-from tqdm import tqdm
-import wandb
-import matplotlib.pyplot as plt
-import numpy as np
-import seaborn as sns
 
-
+# Common data science imports
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
+import torch
+from torch.utils.data import DataLoader, random_split, Dataset
+from tqdm import tqdm
 
+try:
+    import wandb
+except:
+    pass
+
+# GPytorch and linear_operator
 import gpytorch
 from gpytorch.models import ApproximateGP
 from gpytorch.variational import CholeskyVariationalDistribution
 from gpytorch.variational import VariationalStrategy
 from gpytorch.kernels import ScaleKernel, RBFKernel, MaternKernel
 
+# Our imports
 from gp.util import dynamic_instantiation, flatten_dict, unflatten_dict, flatten_dataset, split_dataset, filter_param, heatmap
 
 
