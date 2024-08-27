@@ -30,88 +30,12 @@ from linear_operator.settings import max_cholesky_size
 
 # Our imports
 from gp.soft_gp import SoftGP
+from gp.util import dynamic_instantiation, flatten_dict, unflatten_dict, flatten_dataset, split_dataset, filter_param
 
 
 # =============================================================================
 # Train and Evaluate
 # =============================================================================
-
-# ---------------------------------------------------------
-# Dataset helper
-# ---------------------------------------------------------
-
-def flatten_dataset(dataset: Dataset) -> Tuple[torch.Tensor, torch.Tensor]:
-    train_loader = DataLoader(dataset, batch_size=1024, shuffle=False)
-    train_x = []
-    train_y = []
-    for batch_x, batch_y in train_loader:
-        train_x += [batch_x]
-        train_y += [batch_y]
-    train_x = torch.cat(train_x, dim=0)
-    train_y = torch.cat(train_y, dim=0).squeeze(-1)
-    return train_x, train_y
-
-
-def split_dataset(dataset: Dataset, train_frac=4/9, val_frac=3/9) -> Tuple[Dataset, Dataset, Dataset]:
-    train_size = int(len(dataset) * train_frac)
-    val_size = int(len(dataset) * val_frac)
-    test_size = len(dataset) - train_size - val_size
-    train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
-    return train_dataset, val_dataset, test_dataset
-
-
-# ---------------------------------------------------------
-# Parameter helper
-# ---------------------------------------------------------
-
-def filter_param(named_params: list[Tuple[str, torch.nn.Parameter]], name: str) -> list[Tuple[str, torch.nn.Parameter]]:
-    return [param for n, param in named_params if n != name]
-
-
-# ---------------------------------------------------------
-# Config helpers
-# ---------------------------------------------------------
-
-def flatten_dict(cfg: dict, parent_key='', separator='.') -> dict:
-    items = {}
-    for key, value in cfg.items():
-        new_key = f'{parent_key}{separator}{key}' if parent_key else key
-        if isinstance(value, dict):
-            items.update(flatten_dict(OmegaConf.create(value), new_key, separator=separator))
-        elif isinstance(value, list):
-            for i, item in enumerate(value):
-                items.update(flatten_dict(OmegaConf.create({i: item}), new_key, separator=separator))
-        else:
-            items[new_key] = value
-    return items
-
-
-def unflatten_dict(flat_dict: dict) -> dict:
-    hierarchical_dict = {}
-    for key, value in flat_dict.items():
-        keys = key.split('.')
-        d = hierarchical_dict
-        for sub_key in keys[:-1]:
-            if sub_key not in d:
-                d[sub_key] = {}
-            d = d[sub_key]
-        d[keys[-1]] = value
-    return hierarchical_dict
-
-
-def dynamic_instantiation(config: DictConfig | dict) -> Any:
-    # Instantiate the class using OmegaConf
-    target_class = globals()[config['_target_']]  # Get the class from the globals() dictionary
-    return target_class(**{k: v for k, v in config.items() if k != '_target_'})
-
-
-def flatten_omegaconf(cfg: dict, parent_key='', separator='.'):
-    return flatten_dict(OmegaConf.to_container(cfg, resolve=True), parent_key=parent_key, separator=separator)
-
-
-# ---------------------------------------------------------
-# Train/Eval
-# ---------------------------------------------------------
 
 def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) -> SoftGP:
     # Unpack dataset
@@ -220,14 +144,13 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
         use_pinv = model.fit(train_features, train_labels)
         t3 = time.perf_counter()
 
-        # Evaluated gp
+        # Evaluate gp
         results = eval_gp(model, test_dataset, device=device)
 
         # Record
         if config.wandb.watch:
             wandb.log({
-                "loss": torch.tensor(neg_mlls).mean(),
-                "neg_mll": neg_mll,
+                "loss": (-torch.tensor(neg_mlls)).mean(),
                 "use_pinv": 1 if use_pinv else 0,
                 "test_rmse": results["rmse"],
                 "test_nll": results["nll"],
@@ -280,6 +203,42 @@ def eval_gp(model: SoftGP, test_dataset: Dataset, device="cuda:0") -> float:
     }
 
 
+CONFIG = OmegaConf.create({
+    'model': {
+        'name': 'soft-gp',
+        'kernel': {
+            '_target_': 'RBFKernel'
+        },
+        'num_inducing': 1024,
+        'noise': 1e-3,
+        'learn_noise': False,
+        'solver': 'solve',
+        'cg_tolerance': 1e-5,
+        'mll_approx': 'hutchinson',
+        'fit_chunk_size': 1024,
+        'dtype': 'float32',
+        'device': 'cpu',
+    },
+    'dataset': {
+        'name': 'elevators',
+        'train_frac': 4/9,
+        'val_frac': 3/9,
+    },
+    'training': {
+        'seed': 42,
+        'batch_size': 1024,
+        'learning_rate': 0.01,
+        'epochs': 50,
+    },
+    'wandb': {
+        'watch': True,
+        'group': 'test',
+        'entity': 'bogp',
+        'project': 'soft-gp-2',
+    }
+})
+
+
 if __name__ == "__main__":
     from data.get_uci import (
         PoleteleDataset,
@@ -295,52 +254,16 @@ if __name__ == "__main__":
         BuzzDataset,
         HouseElectricDataset,
     )
-    
-    # Create config
-    config = OmegaConf.create({
-        'model': {
-            'name': 'soft-gp',
-            'kernel': {
-                '_target_': 'RBFKernel'
-            },
-            'num_inducing': 1024,
-            'noise': 1e-3,
-            'learn_noise': False,
-            'solver': 'solve',
-            'cg_tolerance': 1e-5,
-            'mll_approx': 'hutchinson',
-            'fit_chunk_size': 1024,
-            'dtype': 'float32',
-            'device': 'cpu',
-        },
-        'dataset': {
-            'name': 'elevators',
-            'train_frac': 4/9,
-            'val_frac': 3/9,
-        },
-        'training': {
-            'seed': 42,
-            'batch_size': 1024,
-            'learning_rate': 0.01,
-            'epochs': 50,
-        },
-        'wandb': {
-            'watch': True,
-            'group': 'test',
-            'entity': 'bogp',
-            'project': 'soft-gp-2',
-        }
-    })
 
     # Omega config to argparse
     parser = argparse.ArgumentParser(description="Example of converting OmegaConf to argparse")
     parser.add_argument("--data_dir", type=str, default="../data/uci_datasets/uci_datasets")
-    for key, value in flatten_dict(OmegaConf.to_container(config, resolve=True)).items():
+    for key, value in flatten_dict(OmegaConf.to_container(CONFIG, resolve=True)).items():
         arg_type = type(value)  # Infer the type from the configuration
         parser.add_argument(f'--{key}', type=arg_type, default=value, help=f'Default: {value}')
     args = parser.parse_args()
     cli_config = OmegaConf.create(unflatten_dict(vars(args)))
-    config = OmegaConf.merge(config, cli_config)
+    config = OmegaConf.merge(CONFIG, cli_config)
 
     # Create dataset
     if config.dataset.name == "pol":
