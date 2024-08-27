@@ -2,51 +2,46 @@ from io import BytesIO
 from PIL import Image
 from typing import *
 import time
-from torch.utils.data import DataLoader, random_split, Dataset
-import torch
-from tqdm import tqdm
-import wandb
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 
+import gpytorch
+from gpytorch.means import ConstantMean
+from gpytorch.kernels import ScaleKernel, RBFKernel, MaternKernel, InducingPointKernel
+from gpytorch.distributions import MultivariateNormal
+import torch
+from torch.utils.data import Dataset, DataLoader, random_split
+from tqdm import tqdm
+import wandb
 
 from omegaconf import OmegaConf
-from omegaconf.dictconfig import DictConfig
-
-import gpytorch
-from gpytorch.models import ApproximateGP
-from gpytorch.variational import CholeskyVariationalDistribution
-from gpytorch.variational import VariationalStrategy
-from gpytorch.kernels import ScaleKernel, RBFKernel, MaternKernel
 
 from gp.util import dynamic_instantiation, flatten_dict, unflatten_dict, flatten_dataset, split_dataset, filter_param
 
 
-# =============================================================================
-# SVI Model
-# =============================================================================
+class SGPRModel(gpytorch.models.ExactGP):
+    """
+    Adapated from:
+    https://docs.gpytorch.ai/en/latest/examples/02_Scalable_Exact_GPs/SGPR_Regression_CUDA.html
 
-class GPModel(ApproximateGP):
-    def __init__(self, kernel: Callable, inducing_points: torch.Tensor):
-        variational_distribution = CholeskyVariationalDistribution(inducing_points.size(0))
-        variational_strategy = VariationalStrategy(self, inducing_points, variational_distribution, learn_inducing_locations=True)
-        super(GPModel, self).__init__(variational_strategy)
-
-        self.mean_module = gpytorch.means.ZeroMean()
-        self.covar_module = kernel.initialize(lengthscale=1)
+    Args:
+        gpytorch (_type_): _description_
+    """    
+    def __init__(self, kernel: Callable, train_x: torch.Tensor, train_y: torch.Tensor, likelihood: gpytorch.likelihoods.Likelihood, inducing_points=None):
+        super(SGPRModel, self).__init__(train_x, train_y, likelihood)
+        self.mean_module = ConstantMean()
+        # self.base_covar_module = ScaleKernel(kernel)
+        # self.covar_module = InducingPointKernel(self.base_covar_module, inducing_points=inducing_points, likelihood=likelihood)
+        self.covar_module = InducingPointKernel(kernel, inducing_points=inducing_points, likelihood=likelihood)
 
     def forward(self, x):
         mean_x = self.mean_module(x)
         covar_x = self.covar_module(x)
-        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
+        return MultivariateNormal(mean_x, covar_x)
+    
 
-
-# =============================================================================
-# Train
-# =============================================================================
-
-def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
+def train_gp(config, train_dataset, test_dataset):
     # Unpack dataset
     dataset_name = config.dataset.name
 
@@ -74,7 +69,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
         config_dict = flatten_dict(OmegaConf.to_container(config, resolve=True))
 
         # Create name
-        rname = f"svigp_{dataset_name}_{dtype}_{num_inducing}_{batch_size}_{noise}"
+        rname = f"svgp_{dataset_name}_{dtype}_{num_inducing}_{batch_size}_{noise}"
         
         # Initialize wandb
         wandb.init(
@@ -84,89 +79,76 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
             name=rname,
             config=config_dict
         )
-
-    # Set dtype
+    
     print("Setting dtype to ...", dtype)
     torch.set_default_dtype(dtype)
 
+    # Dataset preparation
+    train_x, train_y = zip(*[(torch.tensor(features).to(device), torch.tensor(labels).to(device)) for features, labels in train_dataset])
+    train_x = torch.stack(train_x).squeeze(-1).to(dtype=dtype)
+    train_y = torch.stack(train_y).squeeze(-1).to(dtype=dtype)
+
     # Model
-    inducing_points = torch.rand(num_inducing, train_dataset.dim).to(device=device)
-    model = GPModel(kernel, inducing_points=inducing_points).to(device=device)
+    inducing_points = train_x[:num_inducing, :].clone() # torch.rand(num_inducing, D).cuda()
     likelihood = gpytorch.likelihoods.GaussianLikelihood().to(device=device)
     likelihood.noise = torch.tensor([noise]).to(device=device)
-    mll = gpytorch.mlls.VariationalELBO(likelihood, model, num_data=len(train_dataset))
+    model = SGPRModel(kernel, train_x, train_y, likelihood, inducing_points=inducing_points).to(device=device)
+    mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
 
-    # Set optimizers
+    # Training parameters
     model.train()
     likelihood.train()
-    variational_optimizer = torch.optim.Adam([{'params': model.variational_parameters()}], lr=lr)
-    lr_sched = lambda epoch: 1.0
-    variational_scheduler = torch.optim.lr_scheduler.LambdaLR(variational_optimizer, lr_lambda=lr_sched)
-    
-    if learn_noise:
-        hypers = model.hyperparameters()
-        params = likelihood.parameters()
-    else:
-        hypers = model.hyperparameters()
-        params = filter_param(likelihood.named_parameters(), "noise_covar.raw_noise")
-    hyperparameter_optimizer = torch.optim.Adam([
-        {'params': hypers},
-        {'params': params},
-    ], lr=lr)
-    hyperparameter_scheduler = torch.optim.lr_scheduler.LambdaLR(hyperparameter_optimizer, lr_lambda=lr_sched)
 
+    if learn_noise:
+        params = model.parameters()
+    else:
+        params = filter_param(model.named_parameters(), "likelihood.noise_covar.raw_noise")
+    optimizer = torch.optim.Adam([{'params': params}], lr=lr)
+    lr_sched = lambda epoch: 1.0
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_sched)
+    if learn_noise:
+        hyperparams = model.hyperparameters()
+    else:
+        hyperparams = filter_param(model.named_hyperparameters(), "likelihood.noise_covar.raw_noise")
+    hyperparameter_optimizer = torch.optim.Adam([{'params': hyperparams}], lr=lr)
+    hyperparameter_scheduler = torch.optim.lr_scheduler.LambdaLR(hyperparameter_optimizer, lr_lambda=lr_sched)
+    
     # Training loop
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     pbar = tqdm(range(epochs), desc="Optimizing MLL")
     for epoch in pbar:
         t1 = time.perf_counter()
-        minibatch_iter = train_loader
+        output = likelihood(model(train_x))
+        loss = -mll(output, train_y)
+        loss.backward()
 
-        losses = []; nlls = []
-        # Perform an epoch of fitting hyperparameters (including inducing points)
-        for x_batch, y_batch in minibatch_iter:
-            # Load batch
-            x_batch = x_batch.to(device=device)
-            y_batch = y_batch.to(device=device)
-
-            # Perform optimization
-            variational_optimizer.zero_grad()
-            hyperparameter_optimizer.zero_grad()
-            output = likelihood(model(x_batch))
-            loss = -mll(output, y_batch)
-            nlls += [-loss.item()]
-            losses += [loss.item()]
-            loss.backward()
-
-            # step optimizers and learning rate schedulers
-            variational_optimizer.step()
-            variational_scheduler.step()
-            hyperparameter_optimizer.step()
-            hyperparameter_scheduler.step()
-
-            # Log
-            pbar.set_description(f"Epoch {epoch+1}/{epochs}")
-            pbar.set_postfix(MLL=f"{-loss.item()}")
+        # step optimizers and learning rate schedulers
+        optimizer.step()
+        scheduler.step()
+        hyperparameter_optimizer.step()
+        hyperparameter_scheduler.step()
         t2 = time.perf_counter()
-        
+
+        # Log
+        pbar.set_description(f"Epoch {epoch+1}/{epochs}")
+        pbar.set_postfix(MLL=f"{-loss.item()}")
+
         # Evaluate
-        test_rmse, test_nll = eval_gp(model, likelihood, test_dataset, device=device) 
+        test_rmse, test_nll = eval_gp(model, likelihood, test_dataset, device=device)
         model.train()
         likelihood.train()
 
-        # Log
         if config.wandb.watch:
             wandb.log({
-                "loss": torch.tensor(losses).mean(),
+                "loss": loss,
                 "test_nll": test_nll,
                 "test_rmse": test_rmse,
                 "epoch_time": t2 - t1,
-                "noise": likelihood.noise_covar.noise.cpu(),
-                "lengthscale": model.covar_module.lengthscale.cpu(),
+                "noise": model.likelihood.noise_covar.noise.cpu(),
+                "lengthscale": model.covar_module.base_kernel.lengthscale.cpu(),
             })
 
             if epoch % 10 == 0:
-                z = model.variational_strategy.inducing_points
+                z = model.covar_module.inducing_points
                 K_zz = model.covar_module(z).evaluate()
                 K_zz = K_zz.detach().cpu().numpy()
                 plt.figure(figsize=(8, 6))
@@ -181,16 +163,16 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
                     "inducing_points": wandb.Histogram(z.detach().cpu().numpy()),
                     "K_zz": wandb.Image(img)
                 })
+        
+
 
     return model, likelihood
 
 
-def eval_gp(model, likelihood, test_dataset, device="cuda:0"):
-    # Set into eval mode
+def eval_gp(model, likelihood, test_dataset, device="cuda:0", watch=False):
+    # Testing loop
     model.eval()
     likelihood.eval()
-    
-    # Testing loop
     test_loader = DataLoader(test_dataset, batch_size=1024, shuffle=False)
     squared_errors = []
     nlls = []
@@ -198,21 +180,21 @@ def eval_gp(model, likelihood, test_dataset, device="cuda:0"):
         output = likelihood(model(test_x.to(device=device)))
         means = output.mean.cpu()
         stds = output.variance.sqrt().cpu()
+        # print("output", output)
         nll = -torch.distributions.Normal(means, stds).log_prob(test_y).mean()
-        # se = torch.sum((likelihood(model(test_x.to(device=device))).mean.cpu() - test_y)**2)
         se = torch.sum((means - test_y)**2)
+        # se = torch.sum((likelihood(model(test_x.to(device=device))).mean.cpu() - test_y)**2)
         squared_errors += [se]
         nlls += [nll]
     rmse = torch.sqrt(torch.sum(torch.tensor(squared_errors)) / len(test_dataset))
-    nll = torch.sum(torch.tensor(nlls))
-
-    print("RMSE", rmse, rmse.dtype, "NLL", nll, "NOISE", likelihood.noise_covar.noise.cpu().item(), "LENGTHSCALE", model.covar_module.lengthscale.cpu())
+    nll = torch.sum(torch.tensor(nll))
+    print("RMSE", rmse, rmse.dtype, "NLL", nll, "NOISE", model.likelihood.noise_covar.noise.cpu().item(), "LENGTHSCALE", model.covar_module.base_kernel.lengthscale.cpu())
     return rmse, nll
 
 
 CONFIG = OmegaConf.create({
     'model': {
-        'name': 'svi-gp',
+        'name': 'sv-gp',
         'kernel': {
             '_target_': 'RBFKernel'
         },
