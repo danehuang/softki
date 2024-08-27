@@ -23,30 +23,41 @@ if __name__ == "__main__":
         BuzzDataset,
         HouseElectricDataset,
     )
-    
-    # Create config
-    config = OmegaConf.merge(gp.svi_gp.svi_gp.CONFIG, gp.sv_gp.sv_gp.CONFIG, gp.soft_gp.train.CONFIG)
 
     # Omega config to argparse
+    config = OmegaConf.merge(gp.svi_gp.svi_gp.CONFIG, gp.sv_gp.sv_gp.CONFIG, gp.soft_gp.train.CONFIG)
     parser = argparse.ArgumentParser(description="Example of converting OmegaConf to argparse")
     parser.add_argument("--data_dir", type=str, default="data/uci_datasets/uci_datasets")
     for key, value in flatten_dict(OmegaConf.to_container(config, resolve=True)).items():
         arg_type = type(value)  # Infer the type from the configuration
-        parser.add_argument(f'--{key}', type=arg_type, default=value, help=f'Default: {value}')
+        parser.add_argument(f'--{key}', type=arg_type)
     args = parser.parse_args()
-    cli_config = OmegaConf.create(unflatten_dict(vars(args)))
-    config = OmegaConf.merge(config, cli_config)
+    cli_config = vars(args)
 
+    def merge_dicts_keep_latest_not_none(dict1, dict2):
+        merged_dict = dict1.copy()  # Start with a copy of dict1
+
+        for key, value in dict2.items():
+            # Only update if value is not None
+            if value is not None:
+                merged_dict[key] = value
+
+        return merged_dict
+
+    # Config and train function factory
     if config.model.name == "svi-gp":
         train_gp = gp.svi_gp.svi_gp.train_gp
+        config = OmegaConf.create(unflatten_dict(flatten_omegaconf(merge_dicts_keep_latest_not_none(gp.svi_gp.svi_gp.CONFIG, cli_config))))
     elif config.model.name == "soft-gp":
         train_gp = gp.soft_gp.train.train_gp
+        config = OmegaConf.create(unflatten_dict(flatten_omegaconf(merge_dicts_keep_latest_not_none(gp.soft_gp.train.CONFIG, cli_config))))
     elif config.model.name == "sv-gp":
         train_gp = gp.sv_gp.sv_gp.train_gp
+        config = OmegaConf.create(unflatten_dict(flatten_omegaconf(merge_dicts_keep_latest_not_none(gp.sv_gp.sv_gp.CONFIG, cli_config))))
     else:
         raise ValueError(f"Name not found {config.model.name}")
 
-    # Create dataset
+    # Dataset factory
     if config.dataset.name == "pol":
         dataset = PoleteleDataset(f"{args.data_dir}/pol/data.csv")
     elif config.dataset.name == "elevators":
@@ -73,6 +84,8 @@ if __name__ == "__main__":
         dataset = HouseElectricDataset(f"{args.data_dir}/houseelectric/data.csv")
     else:
         raise ValueError(f"Dataset {config.dataset.name} not supported ...")
+    
+    # Generate splits
     train_dataset, val_dataset, test_dataset = split_dataset(
         dataset,
         train_frac=config.dataset.train_frac,
