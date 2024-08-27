@@ -299,7 +299,7 @@ if __name__ == "__main__":
     config = OmegaConf.merge(config, cli_config)
 
     # Create dataset
-    if config.dataset.name == "poletele":
+    if config.dataset.name == "pol":
         dataset = PoleteleDataset(f"{args.data_dir}/pol/data.csv")
     elif config.dataset.name == "elevators":
         dataset = ElevatorsDataset(f"{args.data_dir}/elevators/data.csv")
@@ -315,8 +315,8 @@ if __name__ == "__main__":
         dataset = CTSlicesDataset(f"{args.data_dir}/slice/data.csv")
     elif config.dataset.name == "keggundirected":
         dataset = KeggUndirectedDataset(f"{args.data_dir}/keggundirected/data.csv")
-    elif config.dataset.name == "road":
-        dataset = RoadDataset(f"{args.data_dir}/road/data.csv")
+    elif config.dataset.name == "3droad":
+        dataset = RoadDataset(f"{args.data_dir}/3droad/data.csv")
     elif config.dataset.name == "song":
         dataset = SongDataset(f"{args.data_dir}/song/data.csv")
     elif config.dataset.name == "buzz":
