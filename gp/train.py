@@ -260,8 +260,10 @@ def eval_gp(model: SoftGP, test_dataset: Dataset, device="cuda:0") -> float:
     neg_mlls = []
     test_loader = DataLoader(test_dataset, batch_size=1024, shuffle=False)
     for x_batch, y_batch in tqdm(test_loader):
-        preds += [(model.pred(x_batch.to(device)) - y_batch.to(device)).detach().cpu()**2]
-        neg_mlls += [-model.mll(x_batch, y_batch)]
+        x_batch = x_batch.to(device)
+        y_batch = y_batch.to(device)
+        preds += [(model.pred(x_batch) - y_batch).detach().cpu()**2]
+        neg_mlls += [-model.mll(x_batch, y_batch).detach().cpu()]
     rmse = torch.sqrt(torch.sum(torch.cat(preds)) / len(test_dataset)).item()
     neg_mll = torch.sum(torch.tensor(neg_mlls))
     

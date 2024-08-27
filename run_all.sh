@@ -8,6 +8,7 @@ DATASETS=(pol elevators bike kin40k protein keggdirected slice keggundirected 3d
 EPOCHS=50
 LEARNING_RATE=0.01
 NUM_INDUCING=512
+DEVICE="cuda:1"
 
 if $DEBUG; then
     EPOCHS=1
@@ -17,6 +18,7 @@ for dataset in "${DATASETS[@]}"
 do
     python gp/train.py \
         --model.num_inducing $NUM_INDUCING \
+        --model.device $DEVICE \
         --data_dir $DATA_DIR \
         --dataset.name $dataset \
         --training.epochs $EPOCHS \
