@@ -228,7 +228,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
             wandb.log({
                 "loss": torch.tensor(neg_mlls).mean(),
                 "neg_mll": neg_mll,
-                "use_pinv": use_pinv,
+                "use_pinv": 1 if use_pinv else 0,
                 "test_rmse": results["rmse"],
                 "test_nll": results["nll"],
                 "epoch_time": t2 - t1,
