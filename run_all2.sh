@@ -30,6 +30,8 @@ do
         --dataset.train_frac $EIGHT_NINTH \
         --dataset.val_frac 0 \
         --wandb.group $GROUP
+        --wandb.group $GROUP \
+        --wandb.watch
 
     python train.py \
         --model.name svi-gp \
@@ -42,6 +44,8 @@ do
         --dataset.train_frac $EIGHT_NINTH \
         --dataset.val_frac 0 \
         --wandb.group $GROUP
+        --wandb.group $GROUP \
+        --wandb.watch
 
     python train.py \
         --model.name sv-gp \
@@ -54,4 +58,6 @@ do
         --dataset.train_frac $EIGHT_NINTH \
         --dataset.val_frac 0 \
         --wandb.group $GROUP
+        --wandb.group $GROUP \
+        --wandb.watch
 done

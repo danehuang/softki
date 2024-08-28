@@ -28,7 +28,8 @@ do
         --training.learning_rate 0.01 \
         --dataset.train_frac $EIGHT_NINTH \
         --dataset.val_frac 0 \
-        --wandb.group $GROUP
+        --wandb.group $GROUP \
+        --wandb.watch
 
     python train.py \
         --model.name svi-gp \
@@ -38,8 +39,6 @@ do
         --dataset.name $dataset \
         --training.epochs $EPOCHS \
         --training.learning_rate 0.01 \
-        --dataset.train_frac $EIGHT_NINTH \
-        --dataset.val_frac 0 \
         --wandb.group $GROUP
 
     python train.py \
@@ -50,7 +49,5 @@ do
         --dataset.name $dataset \
         --training.epochs $EPOCHS \
         --training.learning_rate .1 \
-        --dataset.train_frac $EIGHT_NINTH \
-        --dataset.val_frac 0 \
         --wandb.group $GROUP
 done
