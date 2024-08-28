@@ -7,9 +7,8 @@ DATASETS=(pol elevators bike kin40k protein keggdirected slice keggundirected 3d
 
 GROUP=benchmark3
 EPOCHS=50
-LEARNING_RATE=0.1
-NUM_INDUCING=1024
-DEVICE="cuda:0"
+NUM_INDUCING=512
+DEVICE="cuda:1"
 
 if $DEBUG; then
     EPOCHS=1
