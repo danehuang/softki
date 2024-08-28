@@ -29,7 +29,6 @@ do
         --training.learning_rate 0.01 \
         --dataset.train_frac $EIGHT_NINTH \
         --dataset.val_frac 0 \
-        --wandb.group $GROUP
         --wandb.group $GROUP \
         --wandb.watch
 
@@ -43,7 +42,6 @@ do
         --training.learning_rate 0.01 \
         --dataset.train_frac $EIGHT_NINTH \
         --dataset.val_frac 0 \
-        --wandb.group $GROUP
         --wandb.group $GROUP \
         --wandb.watch
 
@@ -57,7 +55,6 @@ do
         --training.learning_rate .1 \
         --dataset.train_frac $EIGHT_NINTH \
         --dataset.val_frac 0 \
-        --wandb.group $GROUP
         --wandb.group $GROUP \
         --wandb.watch
 done
