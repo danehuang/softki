@@ -273,15 +273,16 @@ class SoftGP(torch.nn.Module):
                         torch.matmul(W_xz, K_zz, out=hat_K_xz[start:,:])
             
             # B^T = [(Lambda^{-1/2} \hat{K}_xz) U_zz ]
-            U_zz = psd_safe_cholesky(K_zz, upper=False)
+            U_zz = psd_safe_cholesky(K_zz, upper=True, max_tries=10)
             Lambda_half_inv_diag = (1 / torch.sqrt(self.noise)) * torch.ones(N, dtype=self.dtype).to(self.device)
             B = torch.cat([Lambda_half_inv_diag.unsqueeze(1) * hat_K_xz, U_zz], dim=0)
 
             # B = QR
             Q, R = torch.linalg.qr(B)
-            
+
             # \alpha = R^{-1} @ Q^T @ Lambda^{-1/2}b
             b = Lambda_half_inv_diag * y
+            # self.alpha = torch.linalg.solve_triangular(R, (Q.T[:, 0:N] @ b).unsqueeze(1), upper=True).squeeze(1) # (should use triangular solve)
             self.alpha = ((torch.linalg.inv(R) @ Q.T)[:, :N] @ b)
             
             # Store for fast inference
