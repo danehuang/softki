@@ -26,7 +26,8 @@ do
         --dataset.name $dataset \
         --training.epochs $EPOCHS \
         --training.learning_rate 0.01 \
-        --wandb.group $GROUP
+        --wandb.group $GROUP \
+        --wandb.watch
 
     python train.py \
         --model.name svi-gp \
@@ -36,7 +37,8 @@ do
         --dataset.name $dataset \
         --training.epochs $EPOCHS \
         --training.learning_rate 0.01 \
-        --wandb.group $GROUP
+        --wandb.group $GROUP \
+        --wandb.watch
 
     python train.py \
         --model.name sv-gp \
@@ -46,5 +48,6 @@ do
         --dataset.name $dataset \
         --training.epochs $EPOCHS \
         --training.learning_rate .1 \
-        --wandb.group $GROUP
+        --wandb.group $GROUP \
+        --wandb.watch
 done
