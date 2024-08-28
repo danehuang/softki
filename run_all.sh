@@ -9,6 +9,7 @@ EPOCHS=50
 LEARNING_RATE=0.01
 NUM_INDUCING=512
 DEVICE="cuda:1"
+GROUP=qr
 
 if $DEBUG; then
     EPOCHS=1
@@ -16,11 +17,26 @@ fi
 
 for dataset in "${DATASETS[@]}"
 do
-    python gp/train.py \
+    python train.py \
+        --model.name soft-gp \
+        --model.num_inducing $NUM_INDUCING \
+        --model.device $DEVICE \
+        --model.use_qr \
+        --data_dir $DATA_DIR \
+        --dataset.name $dataset \
+        --training.epochs $EPOCHS \
+        --training.learning_rate 0.01 \
+        --wandb.watch \
+        --wandb.group $GROUP
+
+    python train.py \
+        --model.name soft-gp \
         --model.num_inducing $NUM_INDUCING \
         --model.device $DEVICE \
         --data_dir $DATA_DIR \
         --dataset.name $dataset \
         --training.epochs $EPOCHS \
-        --training.learning_rate $LEARNING_RATE
+        --training.learning_rate 0.01 \
+        --wandb.watch \
+        --wandb.group $GROUP
 done

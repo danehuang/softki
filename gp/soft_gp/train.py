@@ -42,7 +42,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
     dataset_name = config.dataset.name
 
     # Unpack model configuration
-    kernel, num_inducing, dtype, device, noise, learn_noise, solver, cg_tolerance, mll_approx, fit_chunk_size = (
+    kernel, num_inducing, dtype, device, noise, learn_noise, solver, cg_tolerance, mll_approx, fit_chunk_size, use_qr = (
         dynamic_instantiation(config.model.kernel),
         config.model.num_inducing,
         getattr(torch, config.model.dtype),
@@ -53,6 +53,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
         config.model.cg_tolerance,
         config.model.mll_approx,
         config.model.fit_chunk_size,
+        config.model.use_qr,
     )
 
     # Unpack training configuration
@@ -82,10 +83,6 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
             config=wandb_config
         )
 
-    # Set seed
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-
     # Initialize inducing points with kmeans
     train_features, train_labels = flatten_dataset(train_dataset)
     kmeans = KMeans(n_clusters=num_inducing)
@@ -104,7 +101,8 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
         solver=solver,
         cg_tolerance=cg_tolerance,
         mll_approx=mll_approx,
-        fit_chunk_size=fit_chunk_size
+        fit_chunk_size=fit_chunk_size,
+        use_qr=use_qr,
     )
 
     # Setup optimizer for hyperparameters
@@ -149,7 +147,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
 
         # Record
         if config.wandb.watch:
-            wandb.log({
+            results = {
                 "loss": torch.tensor(neg_mlls).mean(),
                 "use_pinv": 1 if use_pinv else 0,
                 "test_rmse": results["rmse"],
@@ -158,16 +156,17 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
                 "fit_time": t3 - t2,
                 "noise": model.noise.cpu(),
                 "lengthscale": model.kernel.lengthscale.cpu()
-            })
+            }
 
             if epoch % 10 == 0:
                 K_zz = model._mk_cov(model.inducing_points).detach().cpu().numpy()
                 img = heatmap(K_zz)
-
-                wandb.log({
+                results.update({
                     "inducing_points": wandb.Histogram(model.inducing_points.detach().cpu().numpy()),
                     "K_zz": wandb.Image(img)
                 })
+            
+            wandb.log(results)
 
     return model
 
@@ -210,6 +209,7 @@ CONFIG = OmegaConf.create({
         'cg_tolerance': 1e-5,
         'mll_approx': 'hutchinson',
         'fit_chunk_size': 1024,
+        'use_qr': False,
         'dtype': 'float32',
         'device': 'cpu',
     },

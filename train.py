@@ -30,7 +30,12 @@ if __name__ == "__main__":
     parser.add_argument("--data_dir", type=str, default="data/uci_datasets/uci_datasets")
     for key, value in flatten_dict(OmegaConf.to_container(config, resolve=True)).items():
         arg_type = type(value)  # Infer the type from the configuration
-        parser.add_argument(f'--{key}', type=arg_type)
+        if key == "model.name":
+            parser.add_argument(f'--{key}', type=arg_type, default="soft-gp")
+        elif arg_type == bool:
+            parser.add_argument(f'--{key}', action='store_true')
+        else:
+            parser.add_argument(f'--{key}', type=arg_type)
     args = parser.parse_args()
     cli_config = vars(args)
 
@@ -45,13 +50,13 @@ if __name__ == "__main__":
         return merged_dict
 
     # Config and train function factory
-    if config.model.name == "svi-gp":
+    if cli_config["model.name"] == "svi-gp":
         train_gp = gp.svi_gp.svi_gp.train_gp
         config = OmegaConf.create(unflatten_dict(flatten_omegaconf(merge_dicts_keep_latest_not_none(gp.svi_gp.svi_gp.CONFIG, cli_config))))
-    elif config.model.name == "soft-gp":
+    elif cli_config["model.name"] == "soft-gp":
         train_gp = gp.soft_gp.train.train_gp
         config = OmegaConf.create(unflatten_dict(flatten_omegaconf(merge_dicts_keep_latest_not_none(gp.soft_gp.train.CONFIG, cli_config))))
-    elif config.model.name == "sv-gp":
+    elif cli_config["model.name"] == "sv-gp":
         train_gp = gp.sv_gp.sv_gp.train_gp
         config = OmegaConf.create(unflatten_dict(flatten_omegaconf(merge_dicts_keep_latest_not_none(gp.sv_gp.sv_gp.CONFIG, cli_config))))
     else:
@@ -85,6 +90,10 @@ if __name__ == "__main__":
     else:
         raise ValueError(f"Dataset {config.dataset.name} not supported ...")
     
+    # Seed
+    np.random.seed(config.training.seed)
+    torch.manual_seed(config.training.seed)
+
     # Generate splits
     train_dataset, val_dataset, test_dataset = split_dataset(
         dataset,

@@ -5,7 +5,7 @@ DEBUG=false
 DATA_DIR=data/uci_datasets/uci_datasets
 DATASETS=(pol elevators bike kin40k protein keggdirected slice keggundirected 3droad song buzz houseelectric)
 
-GROUP=benchmark
+GROUP=benchmark2
 EPOCHS=50
 LEARNING_RATE=0.1
 NUM_INDUCING=1024

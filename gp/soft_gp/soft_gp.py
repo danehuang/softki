@@ -36,6 +36,7 @@ class SoftGP(torch.nn.Module):
         cg_tolerance=0.5,
         mll_approx="hutchinson",
         fit_chunk_size=1024,
+        use_qr=False,
     ) -> None:
         # Argument checking 
         methods = ["solve", "cholesky", "cg"]
@@ -61,6 +62,9 @@ class SoftGP(torch.nn.Module):
         # Mll approximation settings
         self.solve_method = solver
         self.mll_approx = mll_approx
+
+        # Fit settings
+        self.use_qr = use_qr
         self.fit_chunk_size = fit_chunk_size
 
         # Noise
@@ -238,6 +242,21 @@ class SoftGP(torch.nn.Module):
 
         # Form K_zz
         K_zz = self._mk_cov(self.inducing_points)
+
+        if self.use_qr:
+            print("USING QR")
+            W_xz = self._interp(X)
+            U_zz = torch.linalg.cholesky(K_zz, upper=True)
+            Lambda_half_inv_diag = (1 / torch.sqrt(self.noise)) * torch.ones(N, dtype=self.dtype).to(self.device)
+            hat_K_xz = W_xz @ K_zz
+            B = torch.cat([Lambda_half_inv_diag.unsqueeze(1) * hat_K_xz, U_zz], dim=0)
+            Q, R = torch.linalg.qr(B)
+            # b = torch.cat([Lambda_half_inv_diag * y, torch.zeros(M, dtype=self.dtype, device=self.device)])
+            # self.alpha = ((torch.linalg.inv(R) @ Q.T) @ b)[:N]
+            b = Lambda_half_inv_diag * y
+            self.alpha = ((torch.linalg.inv(R) @ Q.T)[:, :N] @ b)
+            self.K_zz_alpha = K_zz @ self.alpha
+            return False
 
         # Construct A and b for linear solve
         #   A = (K_zz + hat{K}_zx @ noise^{-1} @ hat{K}_xz)

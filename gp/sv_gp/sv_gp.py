@@ -149,14 +149,14 @@ def train_gp(config, train_dataset, test_dataset):
         likelihood.train()
 
         if config.wandb.watch:
-            wandb.log({
+            results = {
                 "loss": loss,
                 "test_nll": test_nll,
                 "test_rmse": test_rmse,
                 "epoch_time": t2 - t1,
                 "noise": model.likelihood.noise_covar.noise.cpu(),
                 "lengthscale": model.covar_module.base_kernel.lengthscale.cpu(),
-            })
+            }
 
             if epoch % 10 == 0:
                 z = model.covar_module.inducing_points
@@ -164,13 +164,13 @@ def train_gp(config, train_dataset, test_dataset):
                 K_zz = K_zz.detach().cpu().numpy()
                 img = heatmap(K_zz)
 
-                wandb.log({
+                results.update({
                     "inducing_points": wandb.Histogram(z.detach().cpu().numpy()),
                     "K_zz": wandb.Image(img)
                 })
+
+            wandb.log(results)
         
-
-
     return model, likelihood
 
 
@@ -205,7 +205,7 @@ CONFIG = OmegaConf.create({
         },
         'num_inducing': 1024,
         'noise': 1e-3,
-        'learn_noise': False,
+        'learn_noise': True,
         'dtype': 'float32',
         'device': 'cpu',
     },

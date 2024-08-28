@@ -158,14 +158,14 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
 
         # Log
         if config.wandb.watch:
-            wandb.log({
+            results = {
                 "loss": torch.tensor(losses).mean(),
                 "test_nll": test_nll,
                 "test_rmse": test_rmse,
                 "epoch_time": t2 - t1,
                 "noise": likelihood.noise_covar.noise.cpu(),
                 "lengthscale": model.covar_module.lengthscale.cpu(),
-            })
+            }
 
             if epoch % 10 == 0:
                 z = model.variational_strategy.inducing_points
@@ -173,10 +173,12 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
                 K_zz = K_zz.detach().cpu().numpy()
                 img = heatmap(K_zz)
 
-                wandb.log({
+                results.update({
                     "inducing_points": wandb.Histogram(z.detach().cpu().numpy()),
                     "K_zz": wandb.Image(img)
                 })
+            
+            wandb.log(results)
 
     return model, likelihood
 
@@ -214,7 +216,7 @@ CONFIG = OmegaConf.create({
         },
         'num_inducing': 1024,
         'noise': 1e-3,
-        'learn_noise': False,
+        'learn_noise': True,
         'dtype': 'float32',
         'device': 'cpu',
     },
