@@ -244,18 +244,49 @@ class SoftGP(torch.nn.Module):
         K_zz = self._mk_cov(self.inducing_points)
 
         if self.use_qr:
-            print("USING QR")
-            W_xz = self._interp(X)
-            U_zz = torch.linalg.cholesky(K_zz, upper=True)
+            if X.shape[0] * X.shape[1] <= 32768:
+                # Compute: W_xz K_zz
+                print("USING QR SMALL")
+                W_xz = self._interp(X)
+                hat_K_xz = W_xz @ K_zz
+            else:
+                # Compute: W_xz K_zz in a batched fashion
+                print("USING QR BATCH")
+                with torch.no_grad():
+                    # Compute batches
+                    fit_chunk_size = self.fit_chunk_size
+                    batches = int(np.floor(N / fit_chunk_size))
+                    Lambda_half_inv_diag = (1 / torch.sqrt(self.noise)) * torch.ones(fit_chunk_size, dtype=self.dtype, device=self.device)
+                    hat_K_xz = torch.zeros((N, M), dtype=self.dtype, device=self.device)
+                    for i in range(batches):
+                        start = i*fit_chunk_size
+                        end = (i+1)*fit_chunk_size
+                        X_batch = X[start:end,:]
+                        W_xz = self._interp(X_batch)
+                        torch.matmul(W_xz, K_zz, out=hat_K_xz[start:end,:])
+                    
+                    start = (i+1)*fit_chunk_size
+                    if N - start > 0:
+                        Lambda_half_inv_diag = (1 / torch.sqrt(self.noise)) * torch.eye(N - (i+1)*fit_chunk_size, dtype=self.dtype, device=self.device)
+                        X_batch = X[start:]
+                        W_xz = self._interp(X_batch)
+                        torch.matmul(W_xz, K_zz, out=hat_K_xz[start:,:])
+            
+            # B^T = [(Lambda^{-1/2} \hat{K}_xz) U_zz ]
+            U_zz = psd_safe_cholesky(K_zz, upper=False)
             Lambda_half_inv_diag = (1 / torch.sqrt(self.noise)) * torch.ones(N, dtype=self.dtype).to(self.device)
-            hat_K_xz = W_xz @ K_zz
             B = torch.cat([Lambda_half_inv_diag.unsqueeze(1) * hat_K_xz, U_zz], dim=0)
+
+            # B = QR
             Q, R = torch.linalg.qr(B)
-            # b = torch.cat([Lambda_half_inv_diag * y, torch.zeros(M, dtype=self.dtype, device=self.device)])
-            # self.alpha = ((torch.linalg.inv(R) @ Q.T) @ b)[:N]
+            
+            # \alpha = R^{-1} @ Q^T @ Lambda^{-1/2}b
             b = Lambda_half_inv_diag * y
             self.alpha = ((torch.linalg.inv(R) @ Q.T)[:, :N] @ b)
+            
+            # Store for fast inference
             self.K_zz_alpha = K_zz @ self.alpha
+
             return False
 
         # Construct A and b for linear solve
