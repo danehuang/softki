@@ -9,6 +9,7 @@ GROUP=benchmark3
 EPOCHS=50
 NUM_INDUCING=512
 DEVICE="cuda:1"
+EIGHT_NINTH=0.888888888
 
 if $DEBUG; then
     EPOCHS=1
@@ -25,6 +26,8 @@ do
         --dataset.name $dataset \
         --training.epochs $EPOCHS \
         --training.learning_rate 0.01 \
+        --dataset.train_frac $EIGHT_NINTH \
+        --dataset.val_frac 0 \
         --wandb.group $GROUP
 
     python train.py \
@@ -35,6 +38,8 @@ do
         --dataset.name $dataset \
         --training.epochs $EPOCHS \
         --training.learning_rate 0.01 \
+        --dataset.train_frac $EIGHT_NINTH \
+        --dataset.val_frac 0 \
         --wandb.group $GROUP
 
     python train.py \
@@ -45,5 +50,7 @@ do
         --dataset.name $dataset \
         --training.epochs $EPOCHS \
         --training.learning_rate .1 \
+        --dataset.train_frac $EIGHT_NINTH \
+        --dataset.val_frac 0 \
         --wandb.group $GROUP
 done
