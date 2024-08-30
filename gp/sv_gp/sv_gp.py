@@ -4,6 +4,7 @@ import time
 
 # Common data science imports
 from omegaconf import OmegaConf
+from sklearn.cluster import KMeans
 import torch
 from torch.utils.data import Dataset, DataLoader, random_split
 from tqdm import tqdm
@@ -95,12 +96,19 @@ def train_gp(config, train_dataset, test_dataset):
     torch.set_default_dtype(dtype)
 
     # Dataset preparation
-    train_x, train_y = zip(*[(torch.tensor(features).to(device), torch.tensor(labels).to(device)) for features, labels in train_dataset])
-    train_x = torch.stack(train_x).squeeze(-1).to(dtype=dtype)
-    train_y = torch.stack(train_y).squeeze(-1).to(dtype=dtype)
+    train_x, train_y = flatten_dataset(train_dataset)
+
+    # Initialize inducing points with kmeans
+    kmeans = KMeans(n_clusters=num_inducing)
+    kmeans.fit(train_x)
+    centers = kmeans.cluster_centers_
+    inducing_points = torch.tensor(centers).to(dtype=dtype, device=device)
+
+    train_x = train_x.to(dtype=dtype, device=device)
+    train_y = train_y.to(dtype=dtype, device=device)
 
     # Model
-    inducing_points = train_x[:num_inducing, :].clone() # torch.rand(num_inducing, D).cuda()
+    # inducing_points = train_x[:num_inducing, :].clone() # torch.rand(num_inducing, D).cuda()
     likelihood = gpytorch.likelihoods.GaussianLikelihood().to(device=device)
     likelihood.noise = torch.tensor([noise]).to(device=device)
     model = SGPRModel(kernel, train_x, train_y, likelihood, inducing_points=inducing_points).to(device=device)
@@ -110,6 +118,7 @@ def train_gp(config, train_dataset, test_dataset):
     model.train()
     likelihood.train()
 
+    # Set optimizer
     if learn_noise:
         params = model.parameters()
     else:
@@ -117,26 +126,21 @@ def train_gp(config, train_dataset, test_dataset):
     optimizer = torch.optim.Adam([{'params': params}], lr=lr)
     lr_sched = lambda epoch: 1.0
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_sched)
-    if learn_noise:
-        hyperparams = model.hyperparameters()
-    else:
-        hyperparams = filter_param(model.named_hyperparameters(), "likelihood.noise_covar.raw_noise")
-    hyperparameter_optimizer = torch.optim.Adam([{'params': hyperparams}], lr=lr)
-    hyperparameter_scheduler = torch.optim.lr_scheduler.LambdaLR(hyperparameter_optimizer, lr_lambda=lr_sched)
     
     # Training loop
     pbar = tqdm(range(epochs), desc="Optimizing MLL")
     for epoch in pbar:
         t1 = time.perf_counter()
-        output = likelihood(model(train_x))
+
+        # Load batch
+        optimizer.zero_grad()
+        output = model(train_x)
         loss = -mll(output, train_y)
         loss.backward()
 
         # step optimizers and learning rate schedulers
         optimizer.step()
         scheduler.step()
-        hyperparameter_optimizer.step()
-        hyperparameter_scheduler.step()
         t2 = time.perf_counter()
 
         # Log
@@ -174,10 +178,12 @@ def train_gp(config, train_dataset, test_dataset):
     return model, likelihood
 
 
-def eval_gp(model, likelihood, test_dataset, device="cuda:0", watch=False):
-    # Testing loop
+def eval_gp(model, likelihood, test_dataset, device="cuda:0"):
+    # Set into eval mode
     model.eval()
     likelihood.eval()
+
+    # Testing loop
     test_loader = DataLoader(test_dataset, batch_size=1024, shuffle=False)
     squared_errors = []
     nlls = []
@@ -185,14 +191,13 @@ def eval_gp(model, likelihood, test_dataset, device="cuda:0", watch=False):
         output = likelihood(model(test_x.to(device=device)))
         means = output.mean.cpu()
         stds = output.variance.sqrt().cpu()
-        # print("output", output)
         nll = -torch.distributions.Normal(means, stds).log_prob(test_y).mean()
         se = torch.sum((means - test_y)**2)
-        # se = torch.sum((likelihood(model(test_x.to(device=device))).mean.cpu() - test_y)**2)
         squared_errors += [se]
         nlls += [nll]
     rmse = torch.sqrt(torch.sum(torch.tensor(squared_errors)) / len(test_dataset))
     nll = torch.sum(torch.tensor(nll))
+
     print("RMSE", rmse, rmse.dtype, "NLL", nll, "NOISE", model.likelihood.noise_covar.noise.cpu().item(), "LENGTHSCALE", model.covar_module.base_kernel.lengthscale.cpu())
     return rmse, nll
 
@@ -203,7 +208,7 @@ CONFIG = OmegaConf.create({
         'kernel': {
             '_target_': 'RBFKernel'
         },
-        'num_inducing': 1024,
+        'num_inducing': 512,
         'noise': 1e-3,
         'learn_noise': True,
         'dtype': 'float32',
@@ -217,7 +222,7 @@ CONFIG = OmegaConf.create({
     'training': {
         'seed': 42,
         'batch_size': 1024,
-        'learning_rate': 0.01,
+        'learning_rate': 0.1,
         'epochs': 50,
     },
     'wandb': {
@@ -237,7 +242,7 @@ if __name__ == "__main__":
     train_dataset, val_dataset, test_dataset = split_dataset(
         dataset,
         train_frac=CONFIG.dataset.train_frac,
-        val_frac=CONFIG.dataset.val_frac
+        val_frac=CONFIG.dataset.val_frac    
     )
 
     # Test
