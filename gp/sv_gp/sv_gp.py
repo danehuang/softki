@@ -4,6 +4,7 @@ import time
 
 # Common data science imports
 from omegaconf import OmegaConf
+from sklearn.cluster import KMeans
 import torch
 from torch.utils.data import Dataset, DataLoader, random_split
 from tqdm import tqdm
@@ -95,12 +96,19 @@ def train_gp(config, train_dataset, test_dataset):
     torch.set_default_dtype(dtype)
 
     # Dataset preparation
-    train_x, train_y = zip(*[(torch.tensor(features).to(device), torch.tensor(labels).to(device)) for features, labels in train_dataset])
-    train_x = torch.stack(train_x).squeeze(-1).to(dtype=dtype)
-    train_y = torch.stack(train_y).squeeze(-1).to(dtype=dtype)
+    train_x, train_y = flatten_dataset(train_dataset)
+
+    # Initialize inducing points with kmeans
+    kmeans = KMeans(n_clusters=num_inducing)
+    kmeans.fit(train_x)
+    centers = kmeans.cluster_centers_
+    inducing_points = torch.tensor(centers).to(dtype=dtype, device=device)
+
+    train_x = train_x.to(dtype=dtype, device=device)
+    train_y = train_y.to(dtype=dtype, device=device)
 
     # Model
-    inducing_points = train_x[:num_inducing, :].clone() # torch.rand(num_inducing, D).cuda()
+    # inducing_points = train_x[:num_inducing, :].clone() # torch.rand(num_inducing, D).cuda()
     likelihood = gpytorch.likelihoods.GaussianLikelihood().to(device=device)
     likelihood.noise = torch.tensor([noise]).to(device=device)
     model = SGPRModel(kernel, train_x, train_y, likelihood, inducing_points=inducing_points).to(device=device)
