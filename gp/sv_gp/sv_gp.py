@@ -106,12 +106,11 @@ def train_gp(config, train_dataset, test_dataset):
     model = SGPRModel(kernel, train_x, train_y, likelihood, inducing_points=inducing_points).to(device=device)
     mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
 
-    # print(list(model.named_parameters()))
-
     # Training parameters
     model.train()
     likelihood.train()
 
+    # Set optimizer
     if learn_noise:
         params = model.parameters()
     else:
@@ -119,26 +118,21 @@ def train_gp(config, train_dataset, test_dataset):
     optimizer = torch.optim.Adam([{'params': params}], lr=lr)
     lr_sched = lambda epoch: 1.0
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_sched)
-    # if learn_noise:
-    #     hyperparams = model.hyperparameters()
-    # else:
-    #     hyperparams = filter_param(model.named_hyperparameters(), "likelihood.noise_covar.raw_noise")
-    # hyperparameter_optimizer = torch.optim.Adam([{'params': hyperparams}], lr=lr)
-    # hyperparameter_scheduler = torch.optim.lr_scheduler.LambdaLR(hyperparameter_optimizer, lr_lambda=lr_sched)
     
     # Training loop
     pbar = tqdm(range(epochs), desc="Optimizing MLL")
     for epoch in pbar:
         t1 = time.perf_counter()
-        output = likelihood(model(train_x))
+
+        # Load batch
+        optimizer.zero_grad()
+        output = model(train_x)
         loss = -mll(output, train_y)
         loss.backward()
 
         # step optimizers and learning rate schedulers
         optimizer.step()
         scheduler.step()
-        # hyperparameter_optimizer.step()
-        # hyperparameter_scheduler.step()
         t2 = time.perf_counter()
 
         # Log
