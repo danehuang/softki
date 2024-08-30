@@ -5,6 +5,7 @@ import time
 # Common data science imports
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
+from sklearn.cluster import KMeans
 import torch
 from torch.utils.data import DataLoader, random_split, Dataset
 from tqdm import tqdm
@@ -91,8 +92,15 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
     print("Setting dtype to ...", dtype)
     torch.set_default_dtype(dtype)
 
+    # Initialize inducing points with kmeans
+    train_x, train_y = flatten_dataset(train_dataset)
+    kmeans = KMeans(n_clusters=num_inducing)
+    kmeans.fit(train_x)
+    centers = kmeans.cluster_centers_
+    inducing_points = torch.tensor(centers).to(dtype=dtype, device=device)
+
     # Model
-    inducing_points = torch.rand(num_inducing, train_dataset.dim).to(device=device)
+#     inducing_points = torch.rand(num_inducing, train_dataset.dim).to(device=device)
     model = GPModel(kernel, inducing_points=inducing_points).to(device=device)
     likelihood = gpytorch.likelihoods.GaussianLikelihood().to(device=device)
     likelihood.noise = torch.tensor([noise]).to(device=device)
