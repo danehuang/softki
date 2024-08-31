@@ -16,6 +16,7 @@ except:
 
 # GPytorch
 import gpytorch
+from gpytorch.constraints import GreaterThan
 from gpytorch.means import ConstantMean
 from gpytorch.kernels import ScaleKernel, RBFKernel, MaternKernel, InducingPointKernel
 from gpytorch.distributions import MultivariateNormal
@@ -68,9 +69,8 @@ def train_gp(config, train_dataset, test_dataset):
     )
 
     # Unpack training configuration
-    seed, batch_size, epochs, lr = (
+    seed, epochs, lr = (
         config.training.seed,
-        config.training.batch_size,
         config.training.epochs,
         config.training.learning_rate,
     )
@@ -81,7 +81,7 @@ def train_gp(config, train_dataset, test_dataset):
         config_dict = flatten_dict(OmegaConf.to_container(config, resolve=True))
 
         # Create name
-        rname = f"svgp_{dataset_name}_{dtype}_{num_inducing}_{batch_size}_{noise}"
+        rname = f"svgp_{dataset_name}_{dtype}_{num_inducing}_{noise}"
         
         # Initialize wandb
         wandb.init(
@@ -103,13 +103,15 @@ def train_gp(config, train_dataset, test_dataset):
     kmeans.fit(train_x)
     centers = kmeans.cluster_centers_
     inducing_points = torch.tensor(centers).to(dtype=dtype, device=device)
+    # inducing_points = torch.rand(num_inducing, train_dataset.dim).to(device=device)
 
     train_x = train_x.to(dtype=dtype, device=device)
     train_y = train_y.to(dtype=dtype, device=device)
 
     # Model
     # inducing_points = train_x[:num_inducing, :].clone() # torch.rand(num_inducing, D).cuda()
-    likelihood = gpytorch.likelihoods.GaussianLikelihood().to(device=device)
+    likelihood = gpytorch.likelihoods.GaussianLikelihood(noise_constraint=GreaterThan(1e-1)).to(device=device)
+    # print("INITIAL NOISE", likelihood.noise_covar.noise.cpu())
     likelihood.noise = torch.tensor([noise]).to(device=device)
     model = SGPRModel(kernel, train_x, train_y, likelihood, inducing_points=inducing_points).to(device=device)
     mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
@@ -160,6 +162,7 @@ def train_gp(config, train_dataset, test_dataset):
                 "epoch_time": t2 - t1,
                 "noise": model.likelihood.noise_covar.noise.cpu(),
                 "lengthscale": model.covar_module.base_kernel.lengthscale.cpu(),
+                # "lengthscale": model.base_covar_module.base_kernel.lengthscale.cpu(),
             }
 
             if epoch % 10 == 0:
@@ -199,6 +202,7 @@ def eval_gp(model, likelihood, test_dataset, device="cuda:0"):
     nll = torch.sum(torch.tensor(nll))
 
     print("RMSE", rmse, rmse.dtype, "NLL", nll, "NOISE", model.likelihood.noise_covar.noise.cpu().item(), "LENGTHSCALE", model.covar_module.base_kernel.lengthscale.cpu())
+    # print("RMSE", rmse, rmse.dtype, "NLL", nll, "NOISE", model.likelihood.noise_covar.noise.cpu().item(), "LENGTHSCALE", model.base_covar_module.base_kernel.lengthscale.cpu())
     return rmse, nll
 
 
@@ -209,7 +213,7 @@ CONFIG = OmegaConf.create({
             '_target_': 'RBFKernel'
         },
         'num_inducing': 512,
-        'noise': 1e-3,
+        'noise': 0.5,
         'learn_noise': True,
         'dtype': 'float32',
         'device': 'cpu',
@@ -221,7 +225,6 @@ CONFIG = OmegaConf.create({
     },
     'training': {
         'seed': 42,
-        'batch_size': 1024,
         'learning_rate': 0.1,
         'epochs': 50,
     },
