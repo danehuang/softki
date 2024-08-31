@@ -17,6 +17,7 @@ except:
 
 # GPytorch and linear_operator
 import gpytorch
+from gpytorch.constraints import GreaterThan
 from gpytorch.models import ApproximateGP
 from gpytorch.variational import CholeskyVariationalDistribution
 from gpytorch.variational import VariationalStrategy
@@ -54,12 +55,13 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
     dataset_name = config.dataset.name
 
     # Unpack model configuration
-    kernel, num_inducing, dtype, device, noise, learn_noise = (
+    kernel, num_inducing, dtype, device, noise, noise_constraint, learn_noise = (
         dynamic_instantiation(config.model.kernel),
         config.model.num_inducing,
         getattr(torch, config.model.dtype),
         config.model.device,
         config.model.noise,
+        config.model.noise_constraint,
         config.model.learn_noise,
     )
 
@@ -102,7 +104,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
     # Model
 #     inducing_points = torch.rand(num_inducing, train_dataset.dim).to(device=device)
     model = GPModel(kernel, inducing_points=inducing_points).to(device=device)
-    likelihood = gpytorch.likelihoods.GaussianLikelihood().to(device=device)
+    likelihood = gpytorch.likelihoods.GaussianLikelihood(noise_constraint=GreaterThan(noise_constraint)).to(device=device)
     likelihood.noise = torch.tensor([noise]).to(device=device)
     mll = gpytorch.mlls.VariationalELBO(likelihood, model, num_data=len(train_dataset))
 
@@ -120,8 +122,8 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
         hypers = model.hyperparameters()
         params = filter_param(likelihood.named_parameters(), "noise_covar.raw_noise")
     hyperparameter_optimizer = torch.optim.Adam([
-        {'params': hypers},
-        {'params': params},
+        {"params": hypers},
+        {"params": params},
     ], lr=lr)
     hyperparameter_scheduler = torch.optim.lr_scheduler.LambdaLR(hyperparameter_optimizer, lr_lambda=lr_sched)
 
@@ -223,7 +225,8 @@ CONFIG = OmegaConf.create({
             '_target_': 'RBFKernel'
         },
         'num_inducing': 1024,
-        'noise': 1e-3,
+        'noise': 2.0,
+        'noise_constraint': 1e-4,
         'learn_noise': True,
         'dtype': 'float32',
         'device': 'cpu',

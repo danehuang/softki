@@ -59,12 +59,13 @@ def train_gp(config, train_dataset, test_dataset):
     dataset_name = config.dataset.name
 
     # Unpack model configuration
-    kernel, num_inducing, dtype, device, noise, learn_noise = (
+    kernel, num_inducing, dtype, device, noise, noise_constraint, learn_noise = (
         dynamic_instantiation(config.model.kernel),
         config.model.num_inducing,
         getattr(torch, config.model.dtype),
         config.model.device,
         config.model.noise,
+        config.model.noise_constraint,
         config.model.learn_noise,
     )
 
@@ -110,7 +111,7 @@ def train_gp(config, train_dataset, test_dataset):
 
     # Model
     # inducing_points = train_x[:num_inducing, :].clone() # torch.rand(num_inducing, D).cuda()
-    likelihood = gpytorch.likelihoods.GaussianLikelihood(noise_constraint=GreaterThan(1e-1)).to(device=device)
+    likelihood = gpytorch.likelihoods.GaussianLikelihood(noise_constraint=GreaterThan(noise_constraint)).to(device=device)
     # print("INITIAL NOISE", likelihood.noise_covar.noise.cpu())
     likelihood.noise = torch.tensor([noise]).to(device=device)
     model = SGPRModel(kernel, train_x, train_y, likelihood, inducing_points=inducing_points).to(device=device)
@@ -213,7 +214,7 @@ CONFIG = OmegaConf.create({
             '_target_': 'RBFKernel'
         },
         'num_inducing': 512,
-        'noise': 0.5,
+        'noise': 2.0,
         'learn_noise': True,
         'dtype': 'float32',
         'device': 'cpu',
