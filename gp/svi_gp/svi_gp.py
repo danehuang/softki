@@ -40,9 +40,9 @@ class GPModel(ApproximateGP):
         self.mean_module = gpytorch.means.ZeroMean()
         self.use_scale = use_scale
         if use_scale:
-            self.covar_module = ScaleKernel(kernel.initialize(lengthscale=1))
+            self.covar_module = ScaleKernel(kernel)
         else:
-            self.covar_module = kernel.initialize(lengthscale=1)
+            self.covar_module = kernel
 
     def forward(self, x):
         mean_x = self.mean_module(x)
