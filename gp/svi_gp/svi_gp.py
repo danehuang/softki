@@ -32,18 +32,34 @@ from gp.util import dynamic_instantiation, flatten_dict, unflatten_dict, flatten
 # =============================================================================
 
 class GPModel(ApproximateGP):
-    def __init__(self, kernel: Callable, inducing_points: torch.Tensor):
+    def __init__(self, kernel: Callable, inducing_points: torch.Tensor, use_scale=True):
         variational_distribution = CholeskyVariationalDistribution(inducing_points.size(0))
         variational_strategy = VariationalStrategy(self, inducing_points, variational_distribution, learn_inducing_locations=True)
         super(GPModel, self).__init__(variational_strategy)
 
         self.mean_module = gpytorch.means.ZeroMean()
-        self.covar_module = kernel.initialize(lengthscale=1)
+        self.use_scale = use_scale
+        if use_scale:
+            self.covar_module = ScaleKernel(kernel.initialize(lengthscale=1))
+        else:
+            self.covar_module = kernel.initialize(lengthscale=1)
 
     def forward(self, x):
         mean_x = self.mean_module(x)
         covar_x = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
+
+    def get_lengthscale(self) -> float:
+        if self.use_scale:
+            return self.covar_module.base_kernel.lengthscale.cpu()
+        else:
+            return self.covar_module.lengthscale.cpu()
+        
+    def get_outputscale(self) -> float:
+        if self.use_scale:
+            return self.covar_module.outputscale.cpu()
+        else:
+            return 1.
 
 
 # =============================================================================
@@ -55,8 +71,9 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
     dataset_name = config.dataset.name
 
     # Unpack model configuration
-    kernel, num_inducing, dtype, device, noise, noise_constraint, learn_noise = (
+    kernel, use_scale, num_inducing, dtype, device, noise, noise_constraint, learn_noise = (
         dynamic_instantiation(config.model.kernel),
+        config.model.use_scale,
         config.model.num_inducing,
         getattr(torch, config.model.dtype),
         config.model.device,
@@ -102,10 +119,10 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
     inducing_points = torch.tensor(centers).to(dtype=dtype, device=device)
 
     # Model
-#     inducing_points = torch.rand(num_inducing, train_dataset.dim).to(device=device)
-    model = GPModel(kernel, inducing_points=inducing_points).to(device=device)
+    # inducing_points = torch.rand(num_inducing, train_dataset.dim).to(device=device)
     likelihood = gpytorch.likelihoods.GaussianLikelihood(noise_constraint=GreaterThan(noise_constraint)).to(device=device)
     likelihood.noise = torch.tensor([noise]).to(device=device)
+    model = GPModel(kernel, inducing_points=inducing_points, use_scale=use_scale).to(device=device)
     mll = gpytorch.mlls.VariationalELBO(likelihood, model, num_data=len(train_dataset))
 
     # Set optimizers
@@ -174,7 +191,8 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
                 "test_rmse": test_rmse,
                 "epoch_time": t2 - t1,
                 "noise": likelihood.noise_covar.noise.cpu(),
-                "lengthscale": model.covar_module.lengthscale.cpu(),
+                "lengthscale": model.get_lengthscale(),
+                "outputscale": model.get_outputscale(),
             }
 
             if epoch % 10 == 0:
@@ -214,7 +232,7 @@ def eval_gp(model, likelihood, test_dataset, device="cuda:0"):
     rmse = torch.sqrt(torch.sum(torch.tensor(squared_errors)) / len(test_dataset))
     nll = torch.sum(torch.tensor(nlls))
 
-    print("RMSE", rmse, rmse.dtype, "NLL", nll, "NOISE", likelihood.noise_covar.noise.cpu().item(), "LENGTHSCALE", model.covar_module.lengthscale.cpu())
+    print("RMSE", rmse, rmse.dtype, "NLL", nll, "NOISE", likelihood.noise_covar.noise.cpu().item(), "LENGTHSCALE", model.get_lengthscale(), "OUTPUTSCALE", model.get_outputscale())
     return rmse, nll
 
 
@@ -224,9 +242,11 @@ CONFIG = OmegaConf.create({
         'kernel': {
             '_target_': 'RBFKernel'
         },
+        'use_scale': True,
         'num_inducing': 1024,
-        'noise': 2.0,
-        'noise_constraint': 1e-4,
+        'induce_init': 'kmeans',
+        'noise': 0.5,
+        'noise_constraint': 1e-1,
         'learn_noise': True,
         'dtype': 'float32',
         'device': 'cpu',

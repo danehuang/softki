@@ -42,8 +42,9 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
     dataset_name = config.dataset.name
 
     # Unpack model configuration
-    kernel, num_inducing, dtype, device, noise, learn_noise, solver, cg_tolerance, mll_approx, fit_chunk_size, use_qr = (
+    kernel, use_scale, num_inducing, dtype, device, noise, learn_noise, solver, cg_tolerance, mll_approx, fit_chunk_size, use_qr = (
         dynamic_instantiation(config.model.kernel),
+        config.model.use_scale,
         config.model.num_inducing,
         getattr(torch, config.model.dtype),
         config.model.device,
@@ -68,8 +69,6 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
     if config.wandb.watch:
         # Create wandb config with training/model config
         config_dict = flatten_dict(OmegaConf.to_container(config, resolve=True))
-        wandb_config = {"model": "softgp"}
-        wandb_config.update(config_dict)
 
         # Create name
         rname = f"softgp_{dataset_name}_{config.model.solver}_{dtype}_{num_inducing}_{batch_size}_{noise}"
@@ -80,7 +79,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
             entity=config.wandb.entity,
             group=config.wandb.group,
             name=rname,
-            config=wandb_config
+            config=config_dict
         )
 
     # Initialize inducing points with kmeans
@@ -98,6 +97,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
         device=device,
         noise=noise,
         learn_noise=learn_noise,
+        use_scale=use_scale,
         solver=solver,
         cg_tolerance=cg_tolerance,
         mll_approx=mll_approx,
@@ -155,7 +155,8 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
                 "epoch_time": t2 - t1,
                 "fit_time": t3 - t2,
                 "noise": model.noise.cpu(),
-                "lengthscale": model.kernel.lengthscale.cpu()
+                "lengthscale": model.get_lengthscale(),
+                "outputscale": model.get_outputscale(),
             }
 
             if epoch % 10 == 0:
@@ -182,13 +183,8 @@ def eval_gp(model: SoftGP, test_dataset: Dataset, device="cuda:0") -> float:
         neg_mlls += [-model.mll(x_batch, y_batch).detach().cpu()]
     rmse = torch.sqrt(torch.sum(torch.cat(preds)) / len(test_dataset)).item()
     neg_mll = torch.sum(torch.tensor(neg_mlls))
-    
-    if isinstance(model.kernel, ScaleKernel):
-        base_kernel_lengthscale = model.kernel.base_kernel.lengthscale.cpu()
-    else:
-        base_kernel_lengthscale = model.kernel.lengthscale.cpu()
-        
-    print("RMSE:", rmse, "NEG_MLL", neg_mll.item(), "NOISE", model.noise.cpu().item(), "LENGTHSCALE", base_kernel_lengthscale)
+            
+    print("RMSE:", rmse, "NEG_MLL", neg_mll.item(), "NOISE", model.noise.cpu().item(), "LENGTHSCALE", model.get_lengthscale(), "OUTPUTSCALE", model.get_outputscale())
     
     return {
         "rmse": rmse,
@@ -202,7 +198,9 @@ CONFIG = OmegaConf.create({
         'kernel': {
             '_target_': 'RBFKernel'
         },
-        'num_inducing': 1024,
+        'use_scale': True,
+        'num_inducing': 512,
+        'induce_init': 'kmeans',
         'noise': 1e-3,
         'learn_noise': False,
         'solver': 'solve',

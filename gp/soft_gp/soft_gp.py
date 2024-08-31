@@ -29,6 +29,7 @@ class SoftGP(torch.nn.Module):
         inducing_points: torch.Tensor,
         noise=1e-3,
         learn_noise=False,
+        use_scale=False,
         device="cpu",
         dtype=torch.float32,
         solver="solve",
@@ -77,10 +78,15 @@ class SoftGP(torch.nn.Module):
             self.raw_noise = noise
 
         # Kernel
-        if isinstance(kernel, ScaleKernel):
-            self.kernel = kernel.to(self.device)
+        self.use_scale = use_scale
+        if use_scale:
+            self.kernel = ScaleKernel(kernel).to(self.device)
         else:
-            self.kernel = kernel.initialize(lengthscale=1).to(self.device)
+            self.kernel = kernel.to(self.device)
+        # if isinstance(kernel, ScaleKernel):
+        #     self.kernel = kernel.to(self.device)
+        # else:
+        #     self.kernel = kernel.initialize(lengthscale=1).to(self.device)
 
         # Inducing points
         self.register_parameter("inducing_points", torch.nn.Parameter(inducing_points))
@@ -108,6 +114,18 @@ class SoftGP(torch.nn.Module):
     @property
     def noise(self):
         return self.noise_constraint.transform(self.raw_noise)
+
+    def get_lengthscale(self) -> float:
+        if self.use_scale:
+            return self.kernel.base_kernel.lengthscale.cpu()
+        else:
+            return self.kernel.lengthscale.cpu()
+        
+    def get_outputscale(self) -> float:
+        if self.use_scale:
+            return self.kernel.outputscale.cpu()
+        else:
+            return 1.
 
     def _mk_cov(self, z: torch.Tensor) -> torch.Tensor:
         return self.kernel(z, z).evaluate()

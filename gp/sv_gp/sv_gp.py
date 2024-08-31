@@ -37,17 +37,35 @@ class SGPRModel(gpytorch.models.ExactGP):
     Args:
         gpytorch (_type_): _description_
     """    
-    def __init__(self, kernel: Callable, train_x: torch.Tensor, train_y: torch.Tensor, likelihood: gpytorch.likelihoods.Likelihood, inducing_points=None):
+    def __init__(self, kernel: Callable, train_x: torch.Tensor, train_y: torch.Tensor, likelihood: gpytorch.likelihoods.Likelihood, inducing_points=None, use_scale=True):
         super(SGPRModel, self).__init__(train_x, train_y, likelihood)
         self.mean_module = ConstantMean()
-        # self.base_covar_module = ScaleKernel(kernel)
-        # self.covar_module = InducingPointKernel(self.base_covar_module, inducing_points=inducing_points, likelihood=likelihood)
-        self.covar_module = InducingPointKernel(kernel, inducing_points=inducing_points, likelihood=likelihood)
+        self.use_scale = use_scale
+        if use_scale:
+            self.base_covar_module = ScaleKernel(kernel)
+            self.covar_module = InducingPointKernel(self.base_covar_module, inducing_points=inducing_points, likelihood=likelihood)
+        else:
+            self.covar_module = InducingPointKernel(kernel, inducing_points=inducing_points, likelihood=likelihood)
 
     def forward(self, x):
         mean_x = self.mean_module(x)
         covar_x = self.covar_module(x)
         return MultivariateNormal(mean_x, covar_x)
+
+    def get_noise(self) -> float:
+        return self.likelihood.noise_covar.noise.cpu()
+
+    def get_lengthscale(self) -> float:
+        if self.use_scale:
+            return self.base_covar_module.base_kernel.lengthscale.cpu()
+        else:
+            return self.covar_module.base_kernel.lengthscale.cpu()
+        
+    def get_outputscale(self) -> float:
+        if self.use_scale:
+            return self.base_covar_module.outputscale.cpu()
+        else:
+            return 1.
     
 
 # =============================================================================
@@ -59,8 +77,9 @@ def train_gp(config, train_dataset, test_dataset):
     dataset_name = config.dataset.name
 
     # Unpack model configuration
-    kernel, num_inducing, dtype, device, noise, noise_constraint, learn_noise = (
+    kernel, use_scale, num_inducing, dtype, device, noise, noise_constraint, learn_noise = (
         dynamic_instantiation(config.model.kernel),
+        config.model.use_scale,
         config.model.num_inducing,
         getattr(torch, config.model.dtype),
         config.model.device,
@@ -112,9 +131,8 @@ def train_gp(config, train_dataset, test_dataset):
     # Model
     # inducing_points = train_x[:num_inducing, :].clone() # torch.rand(num_inducing, D).cuda()
     likelihood = gpytorch.likelihoods.GaussianLikelihood(noise_constraint=GreaterThan(noise_constraint)).to(device=device)
-    # print("INITIAL NOISE", likelihood.noise_covar.noise.cpu())
     likelihood.noise = torch.tensor([noise]).to(device=device)
-    model = SGPRModel(kernel, train_x, train_y, likelihood, inducing_points=inducing_points).to(device=device)
+    model = SGPRModel(kernel, train_x, train_y, likelihood, inducing_points=inducing_points, use_scale=use_scale).to(device=device)
     mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
 
     # Training parameters
@@ -161,9 +179,9 @@ def train_gp(config, train_dataset, test_dataset):
                 "test_nll": test_nll,
                 "test_rmse": test_rmse,
                 "epoch_time": t2 - t1,
-                "noise": model.likelihood.noise_covar.noise.cpu(),
-                "lengthscale": model.covar_module.base_kernel.lengthscale.cpu(),
-                # "lengthscale": model.base_covar_module.base_kernel.lengthscale.cpu(),
+                "noise": model.get_noise(),
+                "lengthscale": model.get_lengthscale(),
+                "outputscale": model.get_outputscale(),
             }
 
             if epoch % 10 == 0:
@@ -202,8 +220,7 @@ def eval_gp(model, likelihood, test_dataset, device="cuda:0"):
     rmse = torch.sqrt(torch.sum(torch.tensor(squared_errors)) / len(test_dataset))
     nll = torch.sum(torch.tensor(nll))
 
-    print("RMSE", rmse, rmse.dtype, "NLL", nll, "NOISE", model.likelihood.noise_covar.noise.cpu().item(), "LENGTHSCALE", model.covar_module.base_kernel.lengthscale.cpu())
-    # print("RMSE", rmse, rmse.dtype, "NLL", nll, "NOISE", model.likelihood.noise_covar.noise.cpu().item(), "LENGTHSCALE", model.base_covar_module.base_kernel.lengthscale.cpu())
+    print("RMSE", rmse, rmse.dtype, "NLL", nll, "NOISE", model.get_noise().item(), "LENGTHSCALE", model.get_lengthscale(), "OUTPUTSCALE", model.get_outputscale())
     return rmse, nll
 
 
@@ -213,9 +230,11 @@ CONFIG = OmegaConf.create({
         'kernel': {
             '_target_': 'RBFKernel'
         },
+        'use_scale': True,
         'num_inducing': 512,
-        'noise': 2.0,
-        'noise_constraint': 1e-4,
+        'induce_init': 'kmeans',
+        'noise': 0.5,
+        'noise_constraint': 1e-1,
         'learn_noise': True,
         'dtype': 'float32',
         'device': 'cpu',
