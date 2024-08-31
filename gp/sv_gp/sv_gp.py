@@ -215,6 +215,7 @@ CONFIG = OmegaConf.create({
         },
         'num_inducing': 512,
         'noise': 2.0,
+        'noise_constraint': 1e-4,
         'learn_noise': True,
         'dtype': 'float32',
         'device': 'cpu',
