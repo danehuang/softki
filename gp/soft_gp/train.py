@@ -1,17 +1,11 @@
 # System/Library imports
 import argparse
-from io import BytesIO
-from PIL import Image
-import matplotlib.pyplot as plt
 import time
 from typing import *
 
 # Common data science imports
-import numpy as np
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
-from omegaconf.listconfig import ListConfig
-import seaborn as sns
 from sklearn.cluster import KMeans
 from tqdm import tqdm
 import torch
@@ -42,10 +36,11 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
     dataset_name = config.dataset.name
 
     # Unpack model configuration
-    kernel, use_scale, num_inducing, dtype, device, noise, learn_noise, solver, cg_tolerance, mll_approx, fit_chunk_size, use_qr = (
+    kernel, use_scale, num_inducing, induce_init, dtype, device, noise, learn_noise, solver, cg_tolerance, mll_approx, fit_chunk_size, use_qr = (
         dynamic_instantiation(config.model.kernel),
         config.model.use_scale,
         config.model.num_inducing,
+        config.model.induce_init,
         getattr(torch, config.model.dtype),
         config.model.device,
         config.model.noise,
@@ -84,10 +79,15 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
 
     # Initialize inducing points with kmeans
     train_features, train_labels = flatten_dataset(train_dataset)
-    kmeans = KMeans(n_clusters=num_inducing)
-    kmeans.fit(train_features)
-    centers = kmeans.cluster_centers_
-    inducing_points = torch.tensor(centers).to(dtype=dtype, device=device)
+    if induce_init == "kmeans":
+        print("Using kmeans ...")
+        kmeans = KMeans(n_clusters=num_inducing)
+        kmeans.fit(train_features)
+        centers = kmeans.cluster_centers_
+        inducing_points = torch.tensor(centers).to(dtype=dtype, device=device)
+    else:
+        print("Using random ...")
+        inducing_points = torch.rand(num_inducing, train_dataset.dim).to(device=device)
     
     # Setup model
     model = SoftGP(

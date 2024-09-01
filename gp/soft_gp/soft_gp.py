@@ -4,6 +4,8 @@ from typing import *
 # Common data science imports
 import numpy as np
 import torch
+from torchviz import make_dot
+
 
 # Gpytorch and linear_operator
 import gpytorch 
@@ -97,6 +99,14 @@ class SoftGP(torch.nn.Module):
         # Fit artifacts
         self.alpha = None
         self.K_zz_alpha = None
+
+        # QR artifacts
+        self.fit_buffer = None
+        self.fit_b = None
+        # self.hat_K_xz = None
+        self.Q = None
+        self.R = None
+        # self.B = None
 
         # CG solver params
         self.max_cg_iter = max_cg_iter
@@ -308,47 +318,52 @@ class SoftGP(torch.nn.Module):
     def _qr_solve_fit(self, M, N, X, y, K_zz):
         if X.shape[0] * X.shape[1] <= 32768:
             # Compute: W_xz K_zz
-            print("USING QR SMALL")
             W_xz = self._interp(X)
-            hat_K_xz = W_xz @ K_zz
+            self.fit_buffer[:N,:] = W_xz @ K_zz
         else:
+            if self.fit_buffer is None:
+                self.fit_buffer = torch.zeros((N + M, M), dtype=self.dtype, device=self.device)
+                self.fit_b = torch.zeros(N, dtype=self.dtype, device=self.device)
+
             # Compute: W_xz K_zz in a batched fashion
-            print("USING QR BATCH")
             with torch.no_grad():
                 # Compute batches
                 fit_chunk_size = self.fit_chunk_size
                 batches = int(np.floor(N / fit_chunk_size))
-                Lambda_half_inv_diag = (1 / torch.sqrt(self.noise)) * torch.ones(fit_chunk_size, dtype=self.dtype, device=self.device)
-                hat_K_xz = torch.zeros((N, M), dtype=self.dtype, device=self.device)
                 for i in range(batches):
                     start = i*fit_chunk_size
                     end = (i+1)*fit_chunk_size
                     X_batch = X[start:end,:]
                     W_xz = self._interp(X_batch)
-                    torch.matmul(W_xz, K_zz, out=hat_K_xz[start:end,:])
+                    torch.matmul(W_xz, K_zz, out=self.fit_buffer[start:end,:])
                 
                 start = (i+1)*fit_chunk_size
                 if N - start > 0:
-                    Lambda_half_inv_diag = (1 / torch.sqrt(self.noise)) * torch.eye(N - (i+1)*fit_chunk_size, dtype=self.dtype, device=self.device)
                     X_batch = X[start:]
                     W_xz = self._interp(X_batch)
-                    torch.matmul(W_xz, K_zz, out=hat_K_xz[start:,:])
+                    torch.matmul(W_xz, K_zz, out=self.fit_buffer[start:N,:])
+            hat_K_xz = self.fit_buffer[:N,:]
         
         # B^T = [(Lambda^{-1/2} \hat{K}_xz) U_zz ]
         U_zz = psd_safe_cholesky(K_zz, upper=True, max_tries=10)
-        Lambda_half_inv_diag = (1 / torch.sqrt(self.noise)) * torch.ones(N, dtype=self.dtype).to(self.device)
-        B = torch.cat([Lambda_half_inv_diag.unsqueeze(1) * hat_K_xz, U_zz], dim=0)
+        # Lambda_half_inv_diag = (1 / torch.sqrt(self.noise)) * torch.ones(N, dtype=self.dtype).to(self.device)
+        # self.fit_buffer[:N,:] = Lambda_half_inv_diag.unsqueeze(1) * hat_K_xz
+        self.fit_buffer[:N,:] *= 1 / torch.sqrt(self.noise)
+        self.fit_buffer[N:,:] = U_zz
 
-        # B = QR
-        Q, R = torch.linalg.qr(B)
+        if self.Q is None:
+            self.Q = torch.zeros((N + M, M), dtype=self.dtype, device=self.device)
+            self.R = torch.zeros((M, M), dtype=self.dtype, device=self.device)
+        with torch.no_grad():
+            # B = QR
+            torch.linalg.qr(self.fit_buffer, out=(self.Q, self.R))
 
-        # \alpha = R^{-1} @ Q^T @ Lambda^{-1/2}b
-        b = Lambda_half_inv_diag * y
-        self.alpha = torch.linalg.solve_triangular(R, (Q.T[:, 0:N] @ b).unsqueeze(1), upper=True).squeeze(1) # (should use triangular solve)
-        # self.alpha = ((torch.linalg.inv(R) @ Q.T)[:, :N] @ b)
-        
+            # \alpha = R^{-1} @ Q^T @ Lambda^{-1/2}b
+            self.fit_b[:] = 1 / torch.sqrt(self.noise) * y
+            alpha = torch.linalg.solve_triangular(self.R, (self.Q.T[:, 0:N] @ self.fit_b).unsqueeze(1), upper=True).squeeze(1)
+
         # Store for fast inference
-        self.K_zz_alpha = K_zz @ self.alpha
+        self.K_zz_alpha = K_zz @ alpha
 
         return False
 

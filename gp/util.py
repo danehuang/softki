@@ -5,6 +5,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+from tqdm.auto import tqdm
 
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
@@ -20,10 +21,10 @@ from gpytorch.kernels import ScaleKernel, RBFKernel
 # ---------------------------------------------------------
 
 def flatten_dataset(dataset: Dataset) -> Tuple[torch.Tensor, torch.Tensor]:
-    train_loader = DataLoader(dataset, batch_size=1024, shuffle=False)
+    train_loader = DataLoader(dataset, batch_size=8192, shuffle=False)
     train_x = []
     train_y = []
-    for batch_x, batch_y in train_loader:
+    for batch_x, batch_y in tqdm(train_loader):
         train_x += [batch_x]
         train_y += [batch_y]
     train_x = torch.cat(train_x, dim=0)
