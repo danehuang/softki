@@ -97,8 +97,10 @@ class SoftGP(torch.nn.Module):
         self.interp = softmax_interp
         
         # Fit artifacts
-        self.alpha = None
-        self.K_zz_alpha = None
+        M = len(self.inducing_points)
+        self.U_zz = torch.zeros((M, M), dtype=self.dtype, device=self.device)
+        self.K_zz_alpha = torch.zeros(M, dtype=self.dtype, device=self.device)
+        self.alpha = torch.zeros((M, 1), dtype=self.dtype, device=self.device)
 
         # QR artifacts
         self.fit_buffer = None
@@ -342,28 +344,29 @@ class SoftGP(torch.nn.Module):
                     X_batch = X[start:]
                     W_xz = self._interp(X_batch)
                     torch.matmul(W_xz, K_zz, out=self.fit_buffer[start:N,:])
-            hat_K_xz = self.fit_buffer[:N,:]
         
-        # B^T = [(Lambda^{-1/2} \hat{K}_xz) U_zz ]
-        U_zz = psd_safe_cholesky(K_zz, upper=True, max_tries=10)
-        # Lambda_half_inv_diag = (1 / torch.sqrt(self.noise)) * torch.ones(N, dtype=self.dtype).to(self.device)
-        # self.fit_buffer[:N,:] = Lambda_half_inv_diag.unsqueeze(1) * hat_K_xz
-        self.fit_buffer[:N,:] *= 1 / torch.sqrt(self.noise)
-        self.fit_buffer[N:,:] = U_zz
-
-        if self.Q is None:
-            self.Q = torch.zeros((N + M, M), dtype=self.dtype, device=self.device)
-            self.R = torch.zeros((M, M), dtype=self.dtype, device=self.device)
         with torch.no_grad():
+            # B^T = [(Lambda^{-1/2} \hat{K}_xz) U_zz ]
+            psd_safe_cholesky(K_zz, out=self.U_zz, upper=True, max_tries=10)
+            # Lambda_half_inv_diag = (1 / torch.sqrt(self.noise)) * torch.ones(N, dtype=self.dtype).to(self.device)
+            # self.fit_buffer[:N,:] = Lambda_half_inv_diag.unsqueeze(1) * hat_K_xz
+            self.fit_buffer[:N,:] *= 1 / torch.sqrt(self.noise)
+            self.fit_buffer[N:,:] = self.U_zz
+
+            if self.Q is None:
+                self.Q = torch.zeros((N + M, M), dtype=self.dtype, device=self.device)
+                self.R = torch.zeros((M, M), dtype=self.dtype, device=self.device)
+        
             # B = QR
             torch.linalg.qr(self.fit_buffer, out=(self.Q, self.R))
 
             # \alpha = R^{-1} @ Q^T @ Lambda^{-1/2}b
             self.fit_b[:] = 1 / torch.sqrt(self.noise) * y
-            alpha = torch.linalg.solve_triangular(self.R, (self.Q.T[:, 0:N] @ self.fit_b).unsqueeze(1), upper=True).squeeze(1)
+            torch.linalg.solve_triangular(self.R, (self.Q.T[:, 0:N] @ self.fit_b).unsqueeze(1), upper=True, out=self.alpha).squeeze(1)
 
-        # Store for fast inference
-        self.K_zz_alpha = K_zz @ alpha
+            # Store for fast inference
+            # self.K_zz_alpha = K_zz @ alpha
+            torch.matmul(K_zz, self.alpha.squeeze(-1), out=self.K_zz_alpha)
 
         return False
 
