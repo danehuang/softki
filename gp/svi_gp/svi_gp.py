@@ -190,7 +190,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
             K_zz = model.covar_module(z).evaluate()
             K_zz = K_zz.detach().cpu().numpy()
             custom_bins = [0, 1e-20, 1e-10, 1e-5, 1e-2, 0.5, 20]
-            np_hist = np.histogram(K_zz.flatten(), bins=custom_bins)
+            hist = np.histogram(K_zz.flatten(), bins=custom_bins)
             results = {
                 "loss": torch.tensor(losses).mean(),
                 "test_nll": test_nll,
@@ -199,7 +199,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
                 "noise": likelihood.noise_covar.noise.cpu(),
                 "lengthscale": model.get_lengthscale(),
                 "outputscale": model.get_outputscale(),
-                "K_zz_bins": wandb.Histogram(np_histogram=np_hist),
+                # "K_zz_bins": wandb.Histogram(np_histogram=np_hist),
                 "K_zz_norm_2": np.linalg.norm(K_zz, ord='fro'),
                 "K_zz_norm_1": np.linalg.norm(K_zz, ord=1),
                 "K_zz_norm_inf": np.linalg.norm(K_zz, ord=np.inf),
