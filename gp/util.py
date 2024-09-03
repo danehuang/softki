@@ -98,7 +98,7 @@ def flatten_omegaconf(cfg: dict, parent_key='', separator='.'):
 
 def heatmap(matrix, eps=1e-12):
     plt.figure(figsize=(8, 6))
-    sns.heatmap(np.log(matrix + eps), cmap="viridis", annot=False)
+    sns.heatmap(np.log(matrix + eps), cmap="viridis", annot=False, vmax=0, vmin=-25)
     img_stream = BytesIO()
     plt.savefig(img_stream, format='png')
     plt.close()
