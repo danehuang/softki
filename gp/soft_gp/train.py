@@ -6,6 +6,7 @@ from typing import *
 # Common data science imports
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
+import numpy as np
 from sklearn.cluster import KMeans
 from tqdm import tqdm
 import torch
@@ -147,6 +148,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
 
         # Record
         if config.wandb.watch:
+            K_zz = model._mk_cov(model.inducing_points).detach().cpu().numpy()
             results = {
                 "loss": torch.tensor(neg_mlls).mean(),
                 "use_pinv": 1 if use_pinv else 0,
@@ -157,10 +159,12 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
                 "noise": model.noise.cpu(),
                 "lengthscale": model.get_lengthscale(),
                 "outputscale": model.get_outputscale(),
+                "K_zz_norm_2": np.linalg.norm(K_zz, ord='fro'),
+                "K_zz_norm_1": np.linalg.norm(K_zz, ord=1),
+                "K_zz_norm_inf": np.linalg.norm(K_zz, ord=np.inf),
             }
 
             if epoch % 10 == 0:
-                K_zz = model._mk_cov(model.inducing_points).detach().cpu().numpy()
                 img = heatmap(K_zz)
                 results.update({
                     "inducing_points": wandb.Histogram(model.inducing_points.detach().cpu().numpy()),

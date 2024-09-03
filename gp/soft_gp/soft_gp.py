@@ -105,10 +105,8 @@ class SoftGP(torch.nn.Module):
         # QR artifacts
         self.fit_buffer = None
         self.fit_b = None
-        # self.hat_K_xz = None
         self.Q = None
         self.R = None
-        # self.B = None
 
         # CG solver params
         self.max_cg_iter = max_cg_iter

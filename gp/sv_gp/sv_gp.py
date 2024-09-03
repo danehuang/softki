@@ -4,6 +4,7 @@ import time
 
 # Common data science imports
 from omegaconf import OmegaConf
+import numpy as np
 from sklearn.cluster import KMeans
 import torch
 from torch.utils.data import Dataset, DataLoader, random_split
@@ -174,6 +175,9 @@ def train_gp(config, train_dataset, test_dataset):
         likelihood.train()
 
         if config.wandb.watch:
+            z = model.covar_module.inducing_points
+            K_zz = model.covar_module(z).evaluate()
+            K_zz = K_zz.detach().cpu().numpy()
             results = {
                 "loss": loss,
                 "test_nll": test_nll,
@@ -182,12 +186,12 @@ def train_gp(config, train_dataset, test_dataset):
                 "noise": model.get_noise(),
                 "lengthscale": model.get_lengthscale(),
                 "outputscale": model.get_outputscale(),
+                "K_zz_norm_2": np.linalg.norm(K_zz, ord='fro'),
+                "K_zz_norm_1": np.linalg.norm(K_zz, ord=1),
+                "K_zz_norm_inf": np.linalg.norm(K_zz, ord=np.inf),
             }
 
             if epoch % 10 == 0:
-                z = model.covar_module.inducing_points
-                K_zz = model.covar_module(z).evaluate()
-                K_zz = K_zz.detach().cpu().numpy()
                 img = heatmap(K_zz)
 
                 results.update({

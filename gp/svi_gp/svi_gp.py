@@ -5,6 +5,7 @@ import time
 # Common data science imports
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
+import numpy as np
 from sklearn.cluster import KMeans
 import torch
 from torch.utils.data import DataLoader, random_split, Dataset
@@ -185,6 +186,9 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
 
         # Log
         if config.wandb.watch:
+            z = model.variational_strategy.inducing_points
+            K_zz = model.covar_module(z).evaluate()
+            K_zz = K_zz.detach().cpu().numpy()
             results = {
                 "loss": torch.tensor(losses).mean(),
                 "test_nll": test_nll,
@@ -193,14 +197,13 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
                 "noise": likelihood.noise_covar.noise.cpu(),
                 "lengthscale": model.get_lengthscale(),
                 "outputscale": model.get_outputscale(),
+                "K_zz_norm_2": np.linalg.norm(K_zz, ord='fro'),
+                "K_zz_norm_1": np.linalg.norm(K_zz, ord=1),
+                "K_zz_norm_inf": np.linalg.norm(K_zz, ord=np.inf),
             }
 
             if epoch % 10 == 0:
-                z = model.variational_strategy.inducing_points
-                K_zz = model.covar_module(z).evaluate()
-                K_zz = K_zz.detach().cpu().numpy()
                 img = heatmap(K_zz)
-
                 results.update({
                     "inducing_points": wandb.Histogram(z.detach().cpu().numpy()),
                     "K_zz": wandb.Image(img)
