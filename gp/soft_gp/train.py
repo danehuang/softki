@@ -149,6 +149,8 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
         # Record
         if config.wandb.watch:
             K_zz = model._mk_cov(model.inducing_points).detach().cpu().numpy()
+            custom_bins = [0] + [10 ** (-2*i) for i in range(10, 0, -1)]
+            hist = np.histogram(K_zz.flatten(), bins=custom_bins)
             results = {
                 "loss": torch.tensor(neg_mlls).mean(),
                 "use_pinv": 1 if use_pinv else 0,
@@ -159,6 +161,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
                 "noise": model.noise.cpu(),
                 "lengthscale": model.get_lengthscale(),
                 "outputscale": model.get_outputscale(),
+                "K_zz_bins": wandb.Histogram(np_histogram=hist),
                 "K_zz_norm_2": np.linalg.norm(K_zz, ord='fro'),
                 "K_zz_norm_1": np.linalg.norm(K_zz, ord=1),
                 "K_zz_norm_inf": np.linalg.norm(K_zz, ord=np.inf),
