@@ -189,7 +189,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
             z = model.variational_strategy.inducing_points
             K_zz = model.covar_module(z).evaluate()
             K_zz = K_zz.detach().cpu().numpy()
-            custom_bins = [0] + [10 ** (-2*i) for i in range(10, 0, -1)]
+            custom_bins = [0, 1e-20, 1e-10, 1e-5, 1e-2, 0.5, 20]
             np_hist = np.histogram(K_zz.flatten(), bins=custom_bins)
             results = {
                 "loss": torch.tensor(losses).mean(),
@@ -204,6 +204,8 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
                 "K_zz_norm_1": np.linalg.norm(K_zz, ord=1),
                 "K_zz_norm_inf": np.linalg.norm(K_zz, ord=np.inf),
             }
+            for cnt, edge in zip(hist[0], hist[1]):
+                results[f"K_zz_bin_{edge}"] = cnt
 
             if epoch % 10 == 0:
                 img = heatmap(K_zz)
