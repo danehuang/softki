@@ -119,3 +119,12 @@ LINE_STYLES = ["dotted", "dashed", "solid", "dotted", "dashed", "solid", "dotted
 LINE_WIDTHS = [1, 1, 1, 2, 2, 2, 3, 3, 3]
 
 COLORS = ['b', 'g', 'r', 'c', 'y', 'm', 'k']
+
+
+MD22_INFO = [
+    ("Ac-Ala3-NHMe", 85109, 42 * 3),
+    ("DHA", 69753, 56 * 3),
+    ("stachyose", 27272, 87 * 3),
+    ("AT-AT", 20001, 118 * 3),
+    ("AT-AT-CG-CG", 10153, 118 * 3)
+]

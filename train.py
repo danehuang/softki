@@ -23,6 +23,13 @@ if __name__ == "__main__":
         BuzzDataset,
         HouseElectricDataset,
     )
+    from data.get_md22 import (
+        MD22_AcAla3NHME_Dataset,
+        MD22_DHA_Dataset,
+        MD22_DNA_AT_AT_CG_CG_Dataset,
+        MD22_DNA_AT_AT_Dataset,
+        MD22_Stachyose_Dataset,
+    )
 
     # Omega config to argparse
     config = OmegaConf.merge(gp.svi_gp.svi_gp.CONFIG, gp.sv_gp.sv_gp.CONFIG, gp.soft_gp.train.CONFIG)
@@ -87,6 +94,16 @@ if __name__ == "__main__":
         dataset = BuzzDataset(f"{args.data_dir}/buzz/data.csv")
     elif config.dataset.name == "houseelectric":
         dataset = HouseElectricDataset(f"{args.data_dir}/houseelectric/data.csv")
+    elif config.dataset.name == "Ac-Ala3-NHMe":
+        dataset = MD22_AcAla3NHME_Dataset(f"{args.data_dir}/md22_Ac-Ala3-NHMe.npz")
+    elif config.dataset.name == "AT-AT":
+        dataset = MD22_DNA_AT_AT_Dataset(f"{args.data_dir}/md22_AT-AT.npz")
+    elif config.dataset.name == "AT-AT-CG-CG":
+        dataset = MD22_DNA_AT_AT_CG_CG_Dataset(f"{args.data_dir}/md22_AT-AT-CG-CG.npz")
+    elif config.dataset.name == "stachyose":
+        dataset = MD22_Stachyose_Dataset(f"{args.data_dir}/md22_stachyose.npz")
+    elif config.dataset.name == "DHA":
+        dataset = MD22_DHA_Dataset(f"{args.data_dir}/md22_DHA.npz")
     else:
         raise ValueError(f"Dataset {config.dataset.name} not supported ...")
     
