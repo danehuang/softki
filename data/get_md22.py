@@ -306,8 +306,8 @@ class CoulombMD22Dataset(Dataset):
 
 
 if __name__ == "__main__":
-    # get_AcAla3NHME()
-    # get_DHA()
-    # get_stachyose()
-    # get_dna_at_at()
+    get_AcAla3NHME()
+    get_DHA()
+    get_stachyose()
+    get_dna_at_at()
     get_dna_at_at_cg_cg()
