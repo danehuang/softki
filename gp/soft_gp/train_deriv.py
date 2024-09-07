@@ -10,7 +10,7 @@ import numpy as np
 from sklearn.cluster import KMeans
 from tqdm import tqdm
 import torch
-from torch.utils.data import random_split, DataLoader, Dataset
+from torch.utils.data import random_split, DataLoader, Dataset, Subset
 
 # For logging
 try:
@@ -24,7 +24,7 @@ from gpytorch.kernels import ScaleKernel, RBFKernel
 from linear_operator.settings import max_cholesky_size
 
 # Our imports
-from gp.soft_gp.soft_gp import SoftGPDeriv
+from gp.soft_gp.soft_gp_deriv import SoftGPDeriv
 from gp.util import dynamic_instantiation, flatten_dict, unflatten_dict, flatten_dataset, split_dataset, filter_param, heatmap
 
 
@@ -78,8 +78,25 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
             config=config_dict
         )
 
+    def my_collate_fn(batch):
+        # Unpack the batch into separate lists of data
+        # Assume each element in the batch is a tuple (features, label)
+        data = [item[0] for item in batch]
+        energies = [item[1]["energy"] for item in batch]
+        forces = [item[1]["neg_force"] for item in batch]
+        
+        # Convert to PyTorch tensors
+        data_tensor = torch.stack(data, dim=0)  # Stack along batch dimension
+        # labels_tensor = torch.stack([torch.tensor(energies).unsqueeze(-1), torch.tensor(forces)], dim=-1)
+        labels_tensor = torch.cat([torch.stack(energies).unsqueeze(-1), torch.stack(forces)], dim=-1)
+
+        return data_tensor, labels_tensor
+
     # Initialize inducing points with kmeans
-    train_features, train_labels = flatten_dataset(train_dataset)
+    # D = train_dataset.dim
+    # train_dataset = Subset(train_dataset, torch.arange(512))
+    # train_dataset.dim = D
+    train_features, train_labels = flatten_dataset(train_dataset, collate_fn=my_collate_fn)
     if induce_init == "kmeans":
         print("Using kmeans ...")
         kmeans = KMeans(n_clusters=num_inducing)
@@ -89,6 +106,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
     else:
         print("Using random ...")
         inducing_points = torch.rand(num_inducing, train_dataset.dim).to(device=device)
+    # inducing_points = torch.rand(num_inducing, train_dataset.dim).to(device=device)
     
     # Setup model
     model = SoftGPDeriv(
@@ -114,7 +132,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
     optimizer = torch.optim.Adam(params, lr=lr)
 
     # Training loop
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=config.dataset.num_workers)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=config.dataset.num_workers, collate_fn=my_collate_fn)
     pbar = tqdm(range(epochs), desc="Optimizing MLL")
     for epoch in pbar:
         t1 = time.perf_counter()
@@ -144,7 +162,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
         t3 = time.perf_counter()
 
         # Evaluate gp
-        results = eval_gp(model, test_dataset, device=device, num_workers=config.dataset.num_workers)
+        results = eval_gp(model, test_dataset, device=device, num_workers=config.dataset.num_workers, collate_fn=my_collate_fn)
 
         # Record
         if config.wandb.watch:
@@ -201,15 +219,15 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
     return model
 
 
-def eval_gp(model: SoftGPDeriv, test_dataset: Dataset, device="cuda:0", num_workers=8) -> float:
+def eval_gp(model: SoftGPDeriv, test_dataset: Dataset, device="cuda:0", num_workers=8, collate_fn=None) -> float:
     preds = []
     neg_mlls = []
-    test_loader = DataLoader(test_dataset, batch_size=1024, shuffle=False, num_workers=num_workers)
+    test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False, num_workers=num_workers, collate_fn=collate_fn)
     for x_batch, y_batch in tqdm(test_loader):
         x_batch = x_batch.to(device)
         y_batch = y_batch.to(device)
-        preds += [(model.pred(x_batch) - y_batch).detach().cpu()**2]
-        neg_mlls += [-model.mll(x_batch, y_batch).detach().cpu()]
+        preds += [(model.pred(x_batch) - y_batch.reshape(-1)).detach().cpu()**2]
+        neg_mlls += [-model.mll(x_batch, y_batch.reshape(-1)).detach().cpu()]
     rmse = torch.sqrt(torch.sum(torch.cat(preds)) / len(test_dataset)).item()
     neg_mll = torch.sum(torch.tensor(neg_mlls))
             
@@ -241,7 +259,7 @@ CONFIG = OmegaConf.create({
         'device': 'cpu',
     },
     'dataset': {
-        'name': 'elevators',
+        'name': 'DHA',
         'num_workers': 1,
         'train_frac': 4/9,
         'val_frac': 3/9,
@@ -253,7 +271,7 @@ CONFIG = OmegaConf.create({
         'epochs': 50,
     },
     'wandb': {
-        'watch': True,
+        'watch': False,
         'group': 'test',
         'entity': 'bogp',
         'project': 'soft-gp-2',
@@ -277,9 +295,17 @@ if __name__ == "__main__":
         HouseElectricDataset,
     )
 
+    from data.get_md22 import (
+        MD22_AcAla3NHME_Dataset,
+        MD22_DHA_Dataset,
+        MD22_DNA_AT_AT_CG_CG_Dataset,
+        MD22_DNA_AT_AT_Dataset,
+        MD22_Stachyose_Dataset,
+    )
+
     # Omega config to argparse
     parser = argparse.ArgumentParser(description="Example of converting OmegaConf to argparse")
-    parser.add_argument("--data_dir", type=str, default="../../data/uci_datasets/uci_datasets")
+    parser.add_argument("--data_dir", type=str, default="../../data")
     for key, value in flatten_dict(OmegaConf.to_container(CONFIG, resolve=True)).items():
         arg_type = type(value)  # Infer the type from the configuration
         parser.add_argument(f'--{key}', type=arg_type, default=value, help=f'Default: {value}')
@@ -312,6 +338,16 @@ if __name__ == "__main__":
         dataset = BuzzDataset(f"{args.data_dir}/buzz/data.csv")
     elif config.dataset.name == "houseelectric":
         dataset = HouseElectricDataset(f"{args.data_dir}/houseelectric/data.csv")
+    elif config.dataset.name == "Ac-Ala3-NHMe":
+        dataset = MD22_AcAla3NHME_Dataset(f"{args.data_dir}/md22_Ac-Ala3-NHMe.npz", get_forces=True)
+    elif config.dataset.name == "AT-AT":
+        dataset = MD22_DNA_AT_AT_Dataset(f"{args.data_dir}/md22_AT-AT.npz", get_forces=True)
+    elif config.dataset.name == "AT-AT-CG-CG":
+        dataset = MD22_DNA_AT_AT_CG_CG_Dataset(f"{args.data_dir}/md22_AT-AT-CG-CG.npz", get_forces=True)
+    elif config.dataset.name == "stachyose":
+        dataset = MD22_Stachyose_Dataset(f"{args.data_dir}/md22_stachyose.npz", get_forces=True)
+    elif config.dataset.name == "DHA":
+        dataset = MD22_DHA_Dataset(f"{args.data_dir}/md22_DHA.npz", get_forces=True)
     else:
         raise ValueError(f"Dataset {config.dataset.name} not supported ...")
     train_dataset, val_dataset, test_dataset = split_dataset(

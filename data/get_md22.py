@@ -57,9 +57,11 @@ class MD22Dataset(Dataset):
                 self.energies += [e[0]]
             else:
                 self.energies += [e]
-            self.forces += [f]
+            self.forces += [torch.tensor(f, dtype=dtype).reshape(-1)]
         self.coords = torch.stack(self.coords).to(dtype=dtype)
         self.energies = torch.tensor(self.energies).to(dtype=dtype)
+        self.forces = torch.stack(self.forces)
+        print(self.forces.shape)
         self.transform = transform
         self.dim = len(self.coords[0].reshape(-1))
         self.zs = torch.tensor(self.raw_data["z"].flatten()).to(dtype)
@@ -84,9 +86,9 @@ class MD22Dataset(Dataset):
             features = self.transform(features)
 
         if self.get_forces:
-            return {
-                "energy": self.energies[id],
-                "force": self.forces[idx],
+            return features, {
+                "energy": self.energies[idx],
+                "neg_force": -self.forces[idx],
             }
         else:
             label = self.energies[idx]
@@ -128,8 +130,8 @@ class MD22_AcAla3NHME_Dataset(MD22Dataset):
     N = 85109
     D = 42 x 3 = 126
     """    
-    def __init__(self, npz_file="./md22_Ac-Ala3-NHMe.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, coulomb=COULOMB):
-        super(MD22_AcAla3NHME_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, flat=True, coulomb=coulomb)
+    def __init__(self, npz_file="./md22_Ac-Ala3-NHMe.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, coulomb=COULOMB, get_forces=False):
+        super(MD22_AcAla3NHME_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, flat=True, coulomb=coulomb, get_forces=get_forces)
 
 
 # =============================================================================
@@ -163,8 +165,8 @@ class MD22_DHA_Dataset(MD22Dataset):
     N = 69753
     D = 56 x 3 = 168
     """    
-    def __init__(self, npz_file="./md22_DHA.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, coulomb=COULOMB):
-        super(MD22_DHA_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, coulomb=coulomb)
+    def __init__(self, npz_file="./md22_DHA.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, coulomb=COULOMB, get_forces=False):
+        super(MD22_DHA_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, coulomb=coulomb, get_forces=get_forces)
         
 
 # =============================================================================
@@ -198,8 +200,8 @@ class MD22_Stachyose_Dataset(MD22Dataset):
     N = 27272
     D = 87 x 3 = 261
     """    
-    def __init__(self, npz_file="./md22_stachyose.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, coulomb=COULOMB):
-        super(MD22_Stachyose_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, coulomb=coulomb)
+    def __init__(self, npz_file="./md22_stachyose.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, coulomb=COULOMB, get_forces=False):
+        super(MD22_Stachyose_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, coulomb=coulomb, get_forces=False)
     
 
 # =============================================================================
@@ -230,8 +232,8 @@ class MD22_DNA_AT_AT_Dataset(MD22Dataset):
     N = 20001
     D = 60 x 3 = 180
     """    
-    def __init__(self, npz_file="./md22_AT-AT.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, coulomb=COULOMB):
-        super(MD22_DNA_AT_AT_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, flat=True, coulomb=coulomb)
+    def __init__(self, npz_file="./md22_AT-AT.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, coulomb=COULOMB, get_forces=False):
+        super(MD22_DNA_AT_AT_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, flat=True, coulomb=coulomb, get_forces=get_forces)
 
 
 # =============================================================================
@@ -276,8 +278,8 @@ class MD22_DNA_AT_AT_CG_CG_Dataset(MD22Dataset):
     N = 10153
     D = 118 x 3 = 354
     """    
-    def __init__(self, npz_file="./md22_AT-AT-CG-CG.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, coulomb=COULOMB):
-        super(MD22_DNA_AT_AT_CG_CG_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, flat=True, coulomb=coulomb)
+    def __init__(self, npz_file="./md22_AT-AT-CG-CG.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, coulomb=COULOMB, get_forces=False):
+        super(MD22_DNA_AT_AT_CG_CG_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, flat=True, coulomb=coulomb, get_forces=get_forces)
 
 
 class CoulombMD22Dataset(Dataset):

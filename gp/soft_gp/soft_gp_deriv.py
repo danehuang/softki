@@ -56,7 +56,7 @@ class SoftGPDeriv(torch.nn.Module):
             raise ValueError(f"Device {device} should be in {devices} ...")
 
         # Create torch module
-        super(SoftGP, self).__init__()
+        super(SoftGPDeriv, self).__init__()
 
         # Misc
         self.device = device
@@ -225,7 +225,7 @@ class SoftGPDeriv(torch.nn.Module):
         elif self.mll_approx == "hutchinson":
             # [Note]: Compute MLL with Hutchinson's trace estimator
             # 1. mean: 0
-            mean = torch.zeros(len(X), dtype=self.dtype, device=self.device)
+            mean = torch.zeros(len(X) * (1 + X.shape[-1]), dtype=self.dtype, device=self.device)
             
             # 2. covariance: Q_xx = W_xz K_zz K_zx + noise I
             cov_mat = W_xz @ K_zz @ W_xz.T 
@@ -233,7 +233,7 @@ class SoftGPDeriv(torch.nn.Module):
 
             # 3. log N(y | mu, Q_xx) \appox 
             hutchinson_mll = HutchinsonPseudoLoss(self, num_trace_samples=10)
-            return hutchinson_mll(mean, cov_mat, y)
+            return hutchinson_mll(mean, cov_mat, y.reshape(-1))
         else:
             raise ValueError(f"Unknown MLL approximation method: {self.mll_approx}")
         
@@ -241,24 +241,25 @@ class SoftGPDeriv(torch.nn.Module):
     # Fit
     # -----------------------------------------------------
 
-    def _qr_solve_fit(self, M, N, X, y, K_zz):
+    def _qr_solve_fit(self, M, N, D, X, y, K_zz):
         if X.shape[0] * X.shape[1] <= 32768:
             # Compute: W_xz K_zz
             W_xz = self._interp(X)
             self.fit_buffer[:N,:] = W_xz @ K_zz
         else:
             if self.fit_buffer is None:
-                self.fit_buffer = torch.zeros((N + M, M), dtype=self.dtype, device=self.device)
-                self.fit_b = torch.zeros(N, dtype=self.dtype, device=self.device)
+                self.fit_buffer = torch.zeros((N * (D + 1) + M, M), dtype=self.dtype, device=self.device)
+                self.fit_b = torch.zeros(N * (D + 1), dtype=self.dtype, device=self.device)
 
             # Compute: W_xz K_zz in a batched fashion
             with torch.no_grad():
                 # Compute batches
                 fit_chunk_size = self.fit_chunk_size
                 batches = int(np.floor(N / fit_chunk_size))
+                i = 0
                 for i in range(batches):
-                    start = i*fit_chunk_size
-                    end = (i+1)*fit_chunk_size
+                    start = i*fit_chunk_size * (D + 1)
+                    end = (i+1)*fit_chunk_size * (D + 1)
                     X_batch = X[start:end,:]
                     W_xz = self._interp(X_batch)
                     torch.matmul(W_xz, K_zz, out=self.fit_buffer[start:end,:])
@@ -269,18 +270,18 @@ class SoftGPDeriv(torch.nn.Module):
                     W_xz = self._interp(X_batch)
                     torch.matmul(W_xz, K_zz, out=self.fit_buffer[start:N,:])
         
-                self.W_xz_cpu = self.fit_buffer[:N, :].detach().cpu()
+                self.W_xz_cpu = self.fit_buffer[:N * (D + 1), :].detach().cpu()
 
         with torch.no_grad():
             # B^T = [(Lambda^{-1/2} \hat{K}_xz) U_zz ]
             psd_safe_cholesky(K_zz, out=self.U_zz, upper=True, max_tries=10)
             # Lambda_half_inv_diag = (1 / torch.sqrt(self.noise)) * torch.ones(N, dtype=self.dtype).to(self.device)
             # self.fit_buffer[:N,:] = Lambda_half_inv_diag.unsqueeze(1) * hat_K_xz
-            self.fit_buffer[:N,:] *= 1 / torch.sqrt(self.noise)
-            self.fit_buffer[N:,:] = self.U_zz
+            self.fit_buffer[:N * (D + 1),:] *= 1 / torch.sqrt(self.noise)
+            self.fit_buffer[N * (D + 1):,:] = self.U_zz
 
             if self.Q is None:
-                self.Q = torch.zeros((N + M, M), dtype=self.dtype, device=self.device)
+                self.Q = torch.zeros((N * (D + 1) + M, M), dtype=self.dtype, device=self.device)
                 self.R = torch.zeros((M, M), dtype=self.dtype, device=self.device)
         
             # B = QR
@@ -288,7 +289,7 @@ class SoftGPDeriv(torch.nn.Module):
 
             # \alpha = R^{-1} @ Q^T @ Lambda^{-1/2}b
             self.fit_b[:] = 1 / torch.sqrt(self.noise) * y
-            torch.linalg.solve_triangular(self.R, (self.Q.T[:, 0:N] @ self.fit_b).unsqueeze(1), upper=True, out=self.alpha).squeeze(1)
+            torch.linalg.solve_triangular(self.R, (self.Q.T[:, 0:N * (D + 1)] @ self.fit_b).unsqueeze(1), upper=True, out=self.alpha).squeeze(1)
 
             # Store for fast inference
             # self.K_zz_alpha = K_zz @ alpha
@@ -317,16 +318,12 @@ class SoftGPDeriv(torch.nn.Module):
         N = len(X)
         M = len(self.inducing_points)
         X = X.to(self.device, dtype=self.dtype)
-        y = y.to(self.device, dtype=self.dtype)
+        y = y.to(self.device, dtype=self.dtype).reshape(-1)
 
         # Form K_zz
         K_zz = self._mk_cov(self.inducing_points)
 
-        if self.use_qr:
-            # return self._qr_solve_fit(M, N, X, y, K_zz)
-            return self._qr_solve_fit(M, N, X, y, K_zz)
-        else:
-            return self._direct_solve_fit(M, N, X, y, K_zz)
+        return self._qr_solve_fit(M, N , X.shape[-1], X, y, K_zz)
 
     # -----------------------------------------------------
     # Predict
