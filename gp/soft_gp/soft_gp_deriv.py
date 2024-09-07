@@ -24,7 +24,7 @@ from linear_solver.cg import linear_cg
 # Soft GP
 # =============================================================================
 
-class SoftGP(torch.nn.Module):
+class SoftGPDeriv(torch.nn.Module):
     def __init__(
         self,
         kernel: Callable,
@@ -88,13 +88,6 @@ class SoftGP(torch.nn.Module):
 
         # Inducing points
         self.register_parameter("inducing_points", torch.nn.Parameter(inducing_points))
-
-        # Interpolation
-        def softmax_interp(X: torch.Tensor, sigma_values: torch.Tensor) -> torch.Tensor:
-            distances = torch.linalg.vector_norm(X - sigma_values, ord=2, dim=-1)
-            softmax_distances = torch.softmax(-distances, dim=-1)
-            return softmax_distances
-        self.interp = softmax_interp
         
         # Fit artifacts
         M = len(self.inducing_points)

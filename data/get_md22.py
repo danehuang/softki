@@ -41,11 +41,13 @@ def coulomb_desc(zs, x):
 # =============================================================================
 
 class MD22Dataset(Dataset):
-    def __init__(self, npz_file="./md22_DHA.npz", dtype=torch.float32, transform=None, standarize=False, flat=False, center=True, coulomb=False):
+    def __init__(self, npz_file="./md22_DHA.npz", dtype=torch.float32, transform=None, standarize=False, flat=False, center=True, coulomb=False, get_forces=False):
         self.raw_data = np.load(npz_file)
         self.coords = []
         self.energies = []
-        for x, e in tqdm(zip(self.raw_data["R"], self.raw_data["E"])):
+        self.get_forces = get_forces
+        self.forces = []
+        for x, e, f in tqdm(zip(self.raw_data["R"], self.raw_data["E"], self.raw_data["F"])):
             if coulomb:
                 self.coords += [coulomb_desc(torch.tensor(self.raw_data["z"].flatten()).to(dtype), torch.tensor(x).to(dtype))]
                 # print(self.coords[-1].min(), self.coords[-1].max())
@@ -55,6 +57,7 @@ class MD22Dataset(Dataset):
                 self.energies += [e[0]]
             else:
                 self.energies += [e]
+            self.forces += [f]
         self.coords = torch.stack(self.coords).to(dtype=dtype)
         self.energies = torch.tensor(self.energies).to(dtype=dtype)
         self.transform = transform
@@ -77,12 +80,17 @@ class MD22Dataset(Dataset):
             idx = idx.tolist()
 
         features = self.coords[idx]
-        label = self.energies[idx]
-
         if self.transform:
             features = self.transform(features)
 
-        return features, label
+        if self.get_forces:
+            return {
+                "energy": self.energies[id],
+                "force": self.forces[idx],
+            }
+        else:
+            label = self.energies[idx]
+            return features, label
     
     def _center_energies(self):
         self.mean = self.energies.mean()
