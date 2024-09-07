@@ -67,7 +67,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
         config_dict = flatten_dict(OmegaConf.to_container(config, resolve=True))
 
         # Create name
-        rname = f"softgp_{dataset_name}_{config.model.solver}_{dtype}_{num_inducing}_{batch_size}_{noise}"
+        rname = f"softgp_{dataset_name}_{num_inducing}_{batch_size}_{noise}_{seed}"
         
         # Initialize wandb
         wandb.init(
@@ -151,7 +151,6 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
             K_zz = model._mk_cov(model.inducing_points).detach().cpu().numpy()
             custom_bins = [0, 1e-20, 1e-10, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 0.5, 20]
             hist = np.histogram(K_zz.flatten(), bins=custom_bins)
-            print(hist)
             results = {
                 "loss": torch.tensor(neg_mlls).mean(),
                 "use_pinv": 1 if use_pinv else 0,
@@ -166,9 +165,28 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
                 "K_zz_norm_2": np.linalg.norm(K_zz, ord='fro'),
                 "K_zz_norm_1": np.linalg.norm(K_zz, ord=1),
                 "K_zz_norm_inf": np.linalg.norm(K_zz, ord=np.inf),
+                "W_xz_norm_2": np.linalg.norm(model.W_xz_cpu, ord='fro'),
+                "W_xz_norm_1": np.linalg.norm(model.W_xz_cpu, ord=1),
+                "W_xz_norm_inf": np.linalg.norm(model.W_xz_cpu, ord=np.inf),
             }
             for cnt, edge in zip(hist[0], hist[1]):
                 results[f"K_zz_bin_{edge}"] = cnt
+
+            def save_parameters():
+                artifact = wandb.Artifact(f"inducing_points_{rname}_{epoch}", type="parameters")
+                np.save("array.npy", model.inducing_points.detach().cpu().numpy()) 
+                artifact.add_file("array.npy")
+                wandb.log_artifact(artifact)
+
+                artifact = wandb.Artifact(f"W_xz_{rname}_{epoch}", type="parameters")
+                np.save("W_xz.npy", model.W_xz_cpu.numpy()) 
+                artifact.add_file("W_xz.npy")
+                wandb.log_artifact(artifact)
+
+                artifact = wandb.Artifact(f"K_zz_{rname}_{epoch}", type="parameters")
+                np.save("K_zz.npy", K_zz) 
+                artifact.add_file("K_zz.npy")
+                wandb.log_artifact(artifact)
 
             if epoch % 10 == 0 or epoch == epochs - 1:
                 img = heatmap(K_zz)
@@ -176,6 +194,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
                     "inducing_points": wandb.Histogram(model.inducing_points.detach().cpu().numpy()),
                     "K_zz": wandb.Image(img)
                 })
+                save_parameters()
             
             wandb.log(results)
 
