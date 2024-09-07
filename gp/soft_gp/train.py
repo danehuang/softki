@@ -114,7 +114,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
     optimizer = torch.optim.Adam(params, lr=lr)
 
     # Training loop
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=config.dataset.num_workers)
     pbar = tqdm(range(epochs), desc="Optimizing MLL")
     for epoch in pbar:
         t1 = time.perf_counter()
@@ -144,12 +144,12 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
         t3 = time.perf_counter()
 
         # Evaluate gp
-        results = eval_gp(model, test_dataset, device=device)
+        results = eval_gp(model, test_dataset, device=device, num_workers=config.dataset.num_workers)
 
         # Record
         if config.wandb.watch:
             K_zz = model._mk_cov(model.inducing_points).detach().cpu().numpy()
-            custom_bins = [0, 1e-20, 1e-10, 1e-5, 1e-2, 0.5, 20]
+            custom_bins = [0, 1e-20, 1e-10, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 0.5, 20]
             hist = np.histogram(K_zz.flatten(), bins=custom_bins)
             print(hist)
             results = {
@@ -170,7 +170,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
             for cnt, edge in zip(hist[0], hist[1]):
                 results[f"K_zz_bin_{edge}"] = cnt
 
-            if epoch % 10 == 0:
+            if epoch % 10 == 0 or epoch == epochs - 1:
                 img = heatmap(K_zz)
                 results.update({
                     "inducing_points": wandb.Histogram(model.inducing_points.detach().cpu().numpy()),
@@ -182,10 +182,10 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
     return model
 
 
-def eval_gp(model: SoftGP, test_dataset: Dataset, device="cuda:0") -> float:
+def eval_gp(model: SoftGP, test_dataset: Dataset, device="cuda:0", num_workers=8) -> float:
     preds = []
     neg_mlls = []
-    test_loader = DataLoader(test_dataset, batch_size=1024, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=1024, shuffle=False, num_workers=num_workers)
     for x_batch, y_batch in tqdm(test_loader):
         x_batch = x_batch.to(device)
         y_batch = y_batch.to(device)
@@ -223,6 +223,7 @@ CONFIG = OmegaConf.create({
     },
     'dataset': {
         'name': 'elevators',
+        'num_workers': 1,
         'train_frac': 4/9,
         'val_frac': 3/9,
     },

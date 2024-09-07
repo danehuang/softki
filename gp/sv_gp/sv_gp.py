@@ -178,7 +178,7 @@ def train_gp(config, train_dataset, test_dataset):
             z = model.covar_module.inducing_points
             K_zz = model.covar_module(z).evaluate()
             K_zz = K_zz.detach().cpu().numpy()
-            custom_bins = [0, 1e-20, 1e-10, 1e-5, 1e-2, 0.5, 20]
+            custom_bins = [0, 1e-20, 1e-10, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 0.5, 20]
             hist = np.histogram(K_zz.flatten(), bins=custom_bins)
             results = {
                 "loss": loss,
@@ -196,7 +196,7 @@ def train_gp(config, train_dataset, test_dataset):
             for cnt, edge in zip(hist[0], hist[1]):
                 results[f"K_zz_bin_{edge}"] = cnt
 
-            if epoch % 10 == 0:
+            if epoch % 10 == 0 or epoch == epochs - 1:
                 img = heatmap(K_zz)
 
                 results.update({

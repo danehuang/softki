@@ -367,7 +367,7 @@ class SoftGP(torch.nn.Module):
             torch.matmul(K_zz, self.alpha.squeeze(-1), out=self.K_zz_alpha)
 
         return False
-
+    
     def fit(self, X: torch.Tensor, y: torch.Tensor) -> bool:
         """Fits a SoftGP to dataset (X, y). That is, solve:
 
@@ -395,6 +395,7 @@ class SoftGP(torch.nn.Module):
         K_zz = self._mk_cov(self.inducing_points)
 
         if self.use_qr:
+            # return self._qr_solve_fit(M, N, X, y, K_zz)
             return self._qr_solve_fit(M, N, X, y, K_zz)
         else:
             return self._direct_solve_fit(M, N, X, y, K_zz)

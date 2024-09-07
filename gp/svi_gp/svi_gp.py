@@ -146,7 +146,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
     hyperparameter_scheduler = torch.optim.lr_scheduler.LambdaLR(hyperparameter_optimizer, lr_lambda=lr_sched)
 
     # Training loop
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=config.dataset.num_workers)
     pbar = tqdm(range(epochs), desc="Optimizing MLL")
     for epoch in pbar:
         t1 = time.perf_counter()
@@ -189,7 +189,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
             z = model.variational_strategy.inducing_points
             K_zz = model.covar_module(z).evaluate()
             K_zz = K_zz.detach().cpu().numpy()
-            custom_bins = [0, 1e-20, 1e-10, 1e-5, 1e-2, 0.5, 20]
+            custom_bins = [0, 1e-20, 1e-10, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 0.5, 20]
             hist = np.histogram(K_zz.flatten(), bins=custom_bins)
             results = {
                 "loss": torch.tensor(losses).mean(),
@@ -207,7 +207,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
             for cnt, edge in zip(hist[0], hist[1]):
                 results[f"K_zz_bin_{edge}"] = cnt
 
-            if epoch % 10 == 0:
+            if epoch % 10 == 0 or epoch == epochs - 1:
                 img = heatmap(K_zz)
                 results.update({
                     "inducing_points": wandb.Histogram(z.detach().cpu().numpy()),
@@ -219,13 +219,13 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
     return model, likelihood
 
 
-def eval_gp(model, likelihood, test_dataset, device="cuda:0"):
+def eval_gp(model, likelihood, test_dataset, device="cuda:0", num_workers=4):
     # Set into eval mode
     model.eval()
     likelihood.eval()
     
     # Testing loop
-    test_loader = DataLoader(test_dataset, batch_size=1024, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=1024, shuffle=False, num_workers=num_workers)
     squared_errors = []
     nlls = []
     for test_x, test_y in tqdm(test_loader):
@@ -263,6 +263,7 @@ CONFIG = OmegaConf.create({
         'name': 'elevators',
         'train_frac': 4/9,
         'val_frac': 3/9,
+        'num_workers': 1,
     },
     'training': {
         'seed': 42,
