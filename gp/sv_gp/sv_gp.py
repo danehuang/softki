@@ -102,7 +102,7 @@ def train_gp(config, train_dataset, test_dataset):
         config_dict = flatten_dict(OmegaConf.to_container(config, resolve=True))
 
         # Create name
-        rname = f"svgp_{dataset_name}_{dtype}_{num_inducing}_{noise}"
+        rname = f"svgp_{dataset_name}_{num_inducing}_{noise}_{seed}"
         
         # Initialize wandb
         wandb.init(
@@ -203,6 +203,11 @@ def train_gp(config, train_dataset, test_dataset):
                     "inducing_points": wandb.Histogram(z.detach().cpu().numpy()),
                     "K_zz": wandb.Image(img)
                 })
+
+                artifact = wandb.Artifact(f"inducing_points_{rname}_{epoch}", type="parameters")
+                np.save("array.npy", z.detach().cpu().numpy()) 
+                artifact.add_file("array.npy")
+                wandb.log_artifact(artifact)
 
             wandb.log(results)
         

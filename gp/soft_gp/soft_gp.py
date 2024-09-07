@@ -343,6 +343,8 @@ class SoftGP(torch.nn.Module):
                     W_xz = self._interp(X_batch)
                     torch.matmul(W_xz, K_zz, out=self.fit_buffer[start:N,:])
         
+                self.W_xz_cpu = self.fit_buffer[:N, :].detach().cpu()
+
         with torch.no_grad():
             # B^T = [(Lambda^{-1/2} \hat{K}_xz) U_zz ]
             psd_safe_cholesky(K_zz, out=self.U_zz, upper=True, max_tries=10)
