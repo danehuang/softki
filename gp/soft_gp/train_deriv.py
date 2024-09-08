@@ -38,7 +38,8 @@ def my_collate_fn(batch):
     # Convert to PyTorch tensors
     data_tensor = torch.stack(data, dim=0)  # Stack along batch dimension
     # labels_tensor = torch.stack([torch.tensor(energies).unsqueeze(-1), torch.tensor(forces)], dim=-1)
-    energies = torch.cat(energies, dim=0)
+    # energies = torch.cat(energies, dim=0)
+    energies = torch.tensor(energies)
     forces = torch.cat(forces, dim=0)
 
     # print("E", energies.shape)
@@ -237,7 +238,9 @@ def eval_gp(model: SoftGPDeriv, test_dataset: Dataset, device="cuda:0", num_work
     for x_batch, y_batch in tqdm(test_loader):
         x_batch = x_batch.to(device)
         y_batch = y_batch.to(device)
-        preds += [(model.pred(x_batch) - y_batch.reshape(-1)).detach().cpu()**2]
+        B = len(x_batch)
+        # print("pred", model.pred(x_batch), "y", y_batch)
+        preds += [(model.pred(x_batch) - y_batch.reshape(-1))[0:B].detach().cpu()**2]
         neg_mlls += [-model.mll(x_batch, y_batch.reshape(-1)).detach().cpu()]
     rmse = torch.sqrt(torch.sum(torch.cat(preds)) / len(test_dataset)).item()
     neg_mll = torch.sum(torch.tensor(neg_mlls))
@@ -292,8 +295,8 @@ CONFIG = OmegaConf.create({
 
 class SineDataset(Dataset):
     def __init__(self):
-        self.xs = torch.linspace(-1, 1, 32).unsqueeze(-1)
-        self.ys = torch.sin(self.xs)
+        self.xs = torch.linspace(-1, 1, 100).unsqueeze(-1)
+        self.ys = torch.sin(self.xs).unsqueeze(-1)
         self.dys = torch.cos(self.ys).unsqueeze(-1)
         self.dim = 1
 

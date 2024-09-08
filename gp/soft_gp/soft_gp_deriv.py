@@ -138,8 +138,7 @@ class SoftGPDeriv(torch.nn.Module):
         softmax_distances = torch.softmax(-distances, dim=-1)
         W_xz = softmax_distances
         softmax_deriv = softmax_distances * (1 - softmax_distances)
-        # W_xz_deriv = (softmax_deriv.unsqueeze(-1) * diff / distances.unsqueeze(-1)).transpose(2, 1)
-        W_xz_deriv = -(softmax_deriv.unsqueeze(-1) * diff / distances.unsqueeze(-1))
+        W_xz_deriv = (softmax_deriv.unsqueeze(-1) * diff / distances.unsqueeze(-1)).transpose(2, 1)
         W_xz_full = torch.cat([W_xz, W_xz_deriv.reshape(-1, z.shape[0])], dim=0)
         # print("W_xz", W_xz.shape, "dW_xz", W_xz_deriv.shape, "concat", W_xz_full.shape)
         return W_xz_full
@@ -232,7 +231,9 @@ class SoftGPDeriv(torch.nn.Module):
             
             # 2. covariance: Q_xx = W_xz K_zz K_zx + noise I
             cov_mat = W_xz @ K_zz @ W_xz.T 
+            # print("COV MAT", cov_mat.shape, "W_XZ", W_xz.shape, "K_ZZ", K_zz.shape)
             cov_mat += torch.eye(cov_mat.shape[1], dtype=self.dtype, device=self.device) * self.noise
+            # print("Y", y)
 
             # 3. log N(y | mu, Q_xx) \appox 
             hutchinson_mll = HutchinsonPseudoLoss(self, num_trace_samples=10)
@@ -267,7 +268,10 @@ class SoftGPDeriv(torch.nn.Module):
                 W_xz = self._interp(X_batch)
                 torch.matmul(W_xz, K_zz, out=self.fit_buffer[start:end,:])
             
-            start = (i+1)*fit_chunk_size * (D + 1)
+            if batches == 0:
+                start = 0
+            else:
+                start = (i+1)*fit_chunk_size * (D + 1)
             # print(start, N * (D + 1))
             if N * (D + 1) - start > 0:
                 X_batch = X[start:,:]
@@ -290,11 +294,14 @@ class SoftGPDeriv(torch.nn.Module):
                 self.R = torch.zeros((M, M), dtype=self.dtype, device=self.device)
         
             # B = QR
+            # print("BEFORE QR", self.fit_buffer)
             torch.linalg.qr(self.fit_buffer, out=(self.Q, self.R))
 
             # \alpha = R^{-1} @ Q^T @ Lambda^{-1/2}b
             self.fit_b[:] = 1 / torch.sqrt(self.noise) * y
+            # print("BEFORE", self.alpha, self.R, self.Q.T[:, 0:N * (D + 1)])
             torch.linalg.solve_triangular(self.R, (self.Q.T[:, 0:N * (D + 1)] @ self.fit_b).unsqueeze(1), upper=True, out=self.alpha).squeeze(1)
+            # print("AFTER", self.alpha)
 
             # Store for fast inference
             # self.K_zz_alpha = K_zz @ alpha
@@ -348,4 +355,6 @@ class SoftGPDeriv(torch.nn.Module):
             torch.Tensor: B tensor of p(y_star | x_star, X, y).
         """        
         W_star_z = self._interp(x_star)
+        # print("interp", W_star_z, "alpha", self.K_zz_alpha)
+        # print("x_star", x_star.shape, "PRED", W_star_z.shape, self.K_zz_alpha.shape)
         return torch.matmul(W_star_z, self.K_zz_alpha).squeeze(-1)
