@@ -134,11 +134,14 @@ class SoftGPDeriv(torch.nn.Module):
         x_expanded = x.unsqueeze(1).expand(-1, z.shape[0], -1)        
         diff = x_expanded - z
         distances = torch.linalg.vector_norm(diff, ord=2, dim=-1)
+        # print("x", x.shape, "z", z.shape, "diff", diff.shape, "distances", distances.shape)
         softmax_distances = torch.softmax(-distances, dim=-1)
         W_xz = softmax_distances
         softmax_deriv = softmax_distances * (1 - softmax_distances)
-        W_xz_deriv = -(softmax_deriv.unsqueeze(-1) * diff / distances.unsqueeze(-1)).transpose(2, 1)
+        # W_xz_deriv = (softmax_deriv.unsqueeze(-1) * diff / distances.unsqueeze(-1)).transpose(2, 1)
+        W_xz_deriv = -(softmax_deriv.unsqueeze(-1) * diff / distances.unsqueeze(-1))
         W_xz_full = torch.cat([W_xz, W_xz_deriv.reshape(-1, z.shape[0])], dim=0)
+        # print("W_xz", W_xz.shape, "dW_xz", W_xz_deriv.shape, "concat", W_xz_full.shape)
         return W_xz_full
 
     # -----------------------------------------------------
@@ -242,35 +245,37 @@ class SoftGPDeriv(torch.nn.Module):
     # -----------------------------------------------------
 
     def _qr_solve_fit(self, M, N, D, X, y, K_zz):
-        if X.shape[0] * X.shape[1] <= 32768:
-            # Compute: W_xz K_zz
-            W_xz = self._interp(X)
-            self.fit_buffer[:N,:] = W_xz @ K_zz
-        else:
-            if self.fit_buffer is None:
-                self.fit_buffer = torch.zeros((N * (D + 1) + M, M), dtype=self.dtype, device=self.device)
-                self.fit_b = torch.zeros(N * (D + 1), dtype=self.dtype, device=self.device)
+        # if X.shape[0] * X.shape[1] <= 32768:
+        #     # Compute: W_xz K_zz
+        #     W_xz = self._interp(X)
+        #     self.fit_buffer[:N,:] = W_xz @ K_zz
+        # else:
+        if self.fit_buffer is None:
+            self.fit_buffer = torch.zeros((N * (D + 1) + M, M), dtype=self.dtype, device=self.device)
+            self.fit_b = torch.zeros(N * (D + 1), dtype=self.dtype, device=self.device)
 
-            # Compute: W_xz K_zz in a batched fashion
-            with torch.no_grad():
-                # Compute batches
-                fit_chunk_size = self.fit_chunk_size
-                batches = int(np.floor(N / fit_chunk_size))
-                i = 0
-                for i in range(batches):
-                    start = i*fit_chunk_size * (D + 1)
-                    end = (i+1)*fit_chunk_size * (D + 1)
-                    X_batch = X[start:end,:]
-                    W_xz = self._interp(X_batch)
-                    torch.matmul(W_xz, K_zz, out=self.fit_buffer[start:end,:])
-                
-                start = (i+1)*fit_chunk_size
-                if N - start > 0:
-                    X_batch = X[start:]
-                    W_xz = self._interp(X_batch)
-                    torch.matmul(W_xz, K_zz, out=self.fit_buffer[start:N,:])
-        
-                self.W_xz_cpu = self.fit_buffer[:N * (D + 1), :].detach().cpu()
+        # Compute: W_xz K_zz in a batched fashion
+        with torch.no_grad():
+            # Compute batches
+            fit_chunk_size = self.fit_chunk_size
+            batches = int(np.floor(N / fit_chunk_size))
+            i = 0
+            for i in range(batches):
+                start = i*fit_chunk_size * (D + 1)
+                end = (i+1)*fit_chunk_size * (D + 1)
+                X_batch = X[start:end,:]
+                W_xz = self._interp(X_batch)
+                torch.matmul(W_xz, K_zz, out=self.fit_buffer[start:end,:])
+            
+            start = (i+1)*fit_chunk_size * (D + 1)
+            # print(start, N * (D + 1))
+            if N * (D + 1) - start > 0:
+                X_batch = X[start:,:]
+                W_xz = self._interp(X_batch)
+                # print("HERE", W_xz.shape, K_zz.shape, self.fit_buffer[start:N*(D+1),:].shape)
+                torch.matmul(W_xz, K_zz, out=self.fit_buffer[start:N*(D+1),:])
+    
+            self.W_xz_cpu = self.fit_buffer[:N * (D + 1), :].detach().cpu()
 
         with torch.no_grad():
             # B^T = [(Lambda^{-1/2} \hat{K}_xz) U_zz ]

@@ -28,6 +28,30 @@ from gp.soft_gp.soft_gp_deriv import SoftGPDeriv
 from gp.util import dynamic_instantiation, flatten_dict, unflatten_dict, flatten_dataset, split_dataset, filter_param, heatmap
 
 
+def my_collate_fn(batch):
+    # Unpack the batch into separate lists of data
+    # Assume each element in the batch is a tuple (features, label)
+    data = [item[0] for item in batch]
+    energies = [item[1]["energy"] for item in batch]
+    forces = [item[1]["neg_force"] for item in batch]
+    
+    # Convert to PyTorch tensors
+    data_tensor = torch.stack(data, dim=0)  # Stack along batch dimension
+    # labels_tensor = torch.stack([torch.tensor(energies).unsqueeze(-1), torch.tensor(forces)], dim=-1)
+    energies = torch.cat(energies, dim=0)
+    forces = torch.cat(forces, dim=0)
+
+    # print("E", energies.shape)
+    # print("F", forces.shape)
+
+    return data_tensor, torch.cat([energies, forces.reshape(-1)])
+
+    # labels_tensor = torch.cat([energies, forces], dim=-1)
+    # print(labels_tensor.shape)
+    # print(torch.cat([labels_tensor[:, 0], labels_tensor[:, 1:].reshape(-1)]).shape)
+    # return data_tensor, torch.cat([labels_tensor[:, 0], labels_tensor[:, 1:].reshape(-1)])
+    # return data_tensor, labels_tensor
+
 # =============================================================================
 # Train and Evaluate
 # =============================================================================
@@ -78,20 +102,6 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
             config=config_dict
         )
 
-    def my_collate_fn(batch):
-        # Unpack the batch into separate lists of data
-        # Assume each element in the batch is a tuple (features, label)
-        data = [item[0] for item in batch]
-        energies = [item[1]["energy"] for item in batch]
-        forces = [item[1]["neg_force"] for item in batch]
-        
-        # Convert to PyTorch tensors
-        data_tensor = torch.stack(data, dim=0)  # Stack along batch dimension
-        # labels_tensor = torch.stack([torch.tensor(energies).unsqueeze(-1), torch.tensor(forces)], dim=-1)
-        labels_tensor = torch.cat([torch.stack(energies).unsqueeze(-1), torch.stack(forces)], dim=-1)
-
-        return data_tensor, labels_tensor
-
     # Initialize inducing points with kmeans
     # D = train_dataset.dim
     # train_dataset = Subset(train_dataset, torch.arange(512))
@@ -141,6 +151,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
         neg_mlls = []
         for x_batch, y_batch in train_loader:
             # Load batch
+            # print(x_batch.shape, y_batch.shape)
             x_batch = x_batch.clone().detach().to(dtype=dtype, device=device)
             y_batch = y_batch.clone().detach().to(dtype=dtype, device=device)
             
@@ -222,7 +233,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
 def eval_gp(model: SoftGPDeriv, test_dataset: Dataset, device="cuda:0", num_workers=8, collate_fn=None) -> float:
     preds = []
     neg_mlls = []
-    test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False, num_workers=num_workers, collate_fn=collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False, num_workers=num_workers, collate_fn=collate_fn)
     for x_batch, y_batch in tqdm(test_loader):
         x_batch = x_batch.to(device)
         y_batch = y_batch.to(device)
@@ -245,28 +256,28 @@ CONFIG = OmegaConf.create({
         'kernel': {
             '_target_': 'RBFKernel'
         },
-        'use_scale': True,
-        'num_inducing': 512,
+        'use_scale': False,
+        'num_inducing': 256,
         'induce_init': 'kmeans',
         'noise': 1e-3,
         'learn_noise': False,
         'solver': 'solve',
         'cg_tolerance': 1e-5,
         'mll_approx': 'hutchinson',
-        'fit_chunk_size': 1024,
+        'fit_chunk_size': 32,
         'use_qr': False,
         'dtype': 'float32',
         'device': 'cpu',
     },
     'dataset': {
-        'name': 'DHA',
+        'name': 'Sine',
         'num_workers': 1,
         'train_frac': 4/9,
         'val_frac': 3/9,
     },
     'training': {
         'seed': 42,
-        'batch_size': 1024,
+        'batch_size': 32,
         'learning_rate': 0.01,
         'epochs': 50,
     },
@@ -277,6 +288,23 @@ CONFIG = OmegaConf.create({
         'project': 'soft-gp-2',
     }
 })
+
+
+class SineDataset(Dataset):
+    def __init__(self):
+        self.xs = torch.linspace(-1, 1, 32).unsqueeze(-1)
+        self.ys = torch.sin(self.xs)
+        self.dys = torch.cos(self.ys).unsqueeze(-1)
+        self.dim = 1
+
+    def __getitem__(self, idx) -> Any:
+        return self.xs[idx], {
+            "energy": self.ys[idx],
+            "neg_force": self.dys[idx]
+        }
+
+    def __len__(self):
+        return len(self.xs)
 
 
 if __name__ == "__main__":
@@ -348,6 +376,8 @@ if __name__ == "__main__":
         dataset = MD22_Stachyose_Dataset(f"{args.data_dir}/md22_stachyose.npz", get_forces=True)
     elif config.dataset.name == "DHA":
         dataset = MD22_DHA_Dataset(f"{args.data_dir}/md22_DHA.npz", get_forces=True)
+    elif config.dataset.name == "Sine":
+        dataset = SineDataset()
     else:
         raise ValueError(f"Dataset {config.dataset.name} not supported ...")
     train_dataset, val_dataset, test_dataset = split_dataset(
@@ -359,5 +389,3 @@ if __name__ == "__main__":
     # Train
     model = train_gp(config, train_dataset, test_dataset)
     
-    # Eval
-    eval_gp(model, test_dataset, device=config.model.device)
