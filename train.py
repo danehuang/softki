@@ -5,6 +5,7 @@ import gp.svi_gp
 import gp.svi_gp.svi_gp
 import gp.sv_gp.sv_gp
 import gp.soft_gp.train
+import gp.exact_gp.exact_gp
 from gp.util import *
 
 
@@ -66,6 +67,9 @@ if __name__ == "__main__":
     elif cli_config["model.name"] == "sv-gp":
         train_gp = gp.sv_gp.sv_gp.train_gp
         config = OmegaConf.create(unflatten_dict(flatten_omegaconf(merge_dicts_keep_latest_not_none(gp.sv_gp.sv_gp.CONFIG, cli_config))))
+    elif cli_config["model.name"] == "exact":
+        train_gp = gp.exact_gp.exact_gp.train_gp
+        config = OmegaConf.create(unflatten_dict(flatten_omegaconf(merge_dicts_keep_latest_not_none(gp.exact_gp.exact_gp.CONFIG, cli_config))))
     else:
         raise ValueError(f"Name not found {config.model.name}")
 
