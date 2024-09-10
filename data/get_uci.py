@@ -160,13 +160,18 @@ class HouseElectricDataset(UCIDataset):
 
 if __name__ == "__main__":
     if not os.path.exists("./uci_datasets"):
+        print("trying to clone")
         subprocess.run(["git clone git@github.com:treforevans/uci_datasets.git"], shell=True)
+    base_dir = r"C:\Users\chris\Desktop\soft-gp\data\uci_datasets\uci_datasets"
 
     for dataset in datasets:
-        if os.path.exists(f"uci_datasets/uci_datasets/{dataset}/data.csv.gz"):
-            print("Unzipping", dataset)
-            subprocess.run([f"gzip -d uci_datasets/uci_datasets/{dataset}/data.csv.gz"], shell=True)
-
+        gz_file_path = os.path.join(base_dir, dataset, "data.csv.gz")
+        if os.path.exists(gz_file_path):
+            print(f"Unzipping {dataset}")
+            subprocess.run(["gzip", "-d", gz_file_path])
+        else:
+            print(f"No gzip file found for {dataset} at {gz_file_path}")
+    
     torch_datasets = [
         PoleteleDataset,
         ElevatorsDataset,
