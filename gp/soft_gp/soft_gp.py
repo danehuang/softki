@@ -31,6 +31,8 @@ class SoftGP(torch.nn.Module):
         inducing_points: torch.Tensor,
         noise=1e-3,
         learn_noise=False,
+        T=5e-3,
+        threshold=1e-5,
         use_scale=False,
         device="cpu",
         dtype=torch.float32,
@@ -79,6 +81,9 @@ class SoftGP(torch.nn.Module):
         else:
             self.raw_noise = noise
 
+        self.T = T
+        self.threshold = threshold
+
         # Kernel
         self.use_scale = use_scale
         if use_scale:
@@ -90,12 +95,23 @@ class SoftGP(torch.nn.Module):
         self.register_parameter("inducing_points", torch.nn.Parameter(inducing_points))
 
         # Interpolation
-        def softmax_interp(X: torch.Tensor, sigma_values: torch.Tensor) -> torch.Tensor:
-            distances = torch.linalg.vector_norm(X - sigma_values, ord=2, dim=-1)
+        # def softmax_interp(X: torch.Tensor, sigma_values: torch.Tensor, threshold=1e-3) -> torch.Tensor:
+        #     distances = torch.linalg.vector_norm(X - sigma_values, ord=2, dim=-1)
+        #     softmax_distances = torch.softmax(-distances, dim=-1)
+        #     return softmax_distances
+        #     # masked_distances = torch.where(softmax_distances < threshold, torch.tensor(0.0, device=softmax_distances.device), softmax_distances)
+        #     # return masked_distances
+
+        def softmax_interp(X: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
+            distances = torch.linalg.vector_norm(X/self.T - z, ord=2, dim=-1)
             softmax_distances = torch.softmax(-distances, dim=-1)
-            return softmax_distances
+            masked_distances = torch.where(softmax_distances < self.threshold, torch.tensor(0.0, device=softmax_distances.device), softmax_distances)
+
+            return masked_distances
         self.interp = softmax_interp
         
+
+
         # Fit artifacts
         M = len(self.inducing_points)
         self.U_zz = torch.zeros((M, M), dtype=self.dtype, device=self.device)

@@ -37,7 +37,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
     dataset_name = config.dataset.name
 
     # Unpack model configuration
-    kernel, use_scale, num_inducing, induce_init, dtype, device, noise, learn_noise, solver, cg_tolerance, mll_approx, fit_chunk_size, use_qr = (
+    kernel, use_scale, num_inducing, induce_init, dtype, device, noise, learn_noise, T, threshold, solver, cg_tolerance, mll_approx, fit_chunk_size, use_qr = (
         dynamic_instantiation(config.model.kernel),
         config.model.use_scale,
         config.model.num_inducing,
@@ -46,6 +46,8 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
         config.model.device,
         config.model.noise,
         config.model.learn_noise,
+        config.model.T,
+        config.model.threshold,
         config.model.solver,
         config.model.cg_tolerance,
         config.model.mll_approx,
@@ -98,6 +100,8 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
         device=device,
         noise=noise,
         learn_noise=learn_noise,
+        T=T,
+        threshold=threshold,
         use_scale=use_scale,
         solver=solver,
         cg_tolerance=cg_tolerance,
@@ -231,6 +235,8 @@ CONFIG = OmegaConf.create({
         'num_inducing': 512,
         'induce_init': 'kmeans',
         'noise': 1e-3,
+        'T': 5e-3,
+        'threshold': 1e-5,
         'learn_noise': False,
         'solver': 'solve',
         'cg_tolerance': 1e-5,
