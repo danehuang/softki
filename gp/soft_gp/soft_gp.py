@@ -31,8 +31,12 @@ class SoftGP(torch.nn.Module):
         inducing_points: torch.Tensor,
         noise=1e-3,
         learn_noise=False,
+        use_T=False,
         T=5e-3,
+        learn_T=False,
+        use_threshold=False,
         threshold=1e-5,
+        learn_threshold=False,
         use_scale=False,
         device="cpu",
         dtype=torch.float32,
@@ -81,18 +85,20 @@ class SoftGP(torch.nn.Module):
         else:
             self.raw_noise = noise
 
+        self.use_T = use_T
         self.T_constraint = gpytorch.constraints.GreaterThan(5e-5)
         T = torch.tensor([T], dtype=self.dtype, device=self.device)
         T = self.T_constraint.inverse_transform(T)
-        if True:
+        if learn_T:
             self.register_parameter("raw_T", torch.nn.Parameter(T))
         else:
             self.raw_T = T
         
+        self.use_threshold = use_threshold
         self.threshold_constraint = gpytorch.constraints.GreaterThan(1e-10)
         threshold = torch.tensor([threshold], dtype=self.dtype, device=self.device)
         threshold = self.threshold_constraint.inverse_transform(threshold)
-        if False:
+        if learn_threshold:
             self.register_parameter("raw_threshold", torch.nn.Parameter(threshold))
         else:
             self.raw_threshold = threshold
@@ -108,22 +114,44 @@ class SoftGP(torch.nn.Module):
         self.register_parameter("inducing_points", torch.nn.Parameter(inducing_points))
 
         # Interpolation
-        # def softmax_interp(X: torch.Tensor, sigma_values: torch.Tensor, threshold=1e-3) -> torch.Tensor:
-        #     distances = torch.linalg.vector_norm(X - sigma_values, ord=2, dim=-1)
-        #     softmax_distances = torch.softmax(-distances, dim=-1)
-        #     return softmax_distances
-        #     # masked_distances = torch.where(softmax_distances < threshold, torch.tensor(0.0, device=softmax_distances.device), softmax_distances)
-        #     # return masked_distances
-
         def softmax_interp(X: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
+            distances = torch.linalg.vector_norm(X - z, ord=2, dim=-1)
+            softmax_distances = torch.softmax(-distances, dim=-1)
+            return softmax_distances
+
+        def softmax_interp_with_T(X: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
             distances = torch.linalg.vector_norm(X/self.T - z, ord=2, dim=-1)
             softmax_distances = torch.softmax(-distances, dim=-1)
-            # mask = torch.sigmoid(softmax_distances - self.threshold)
-            # masked_distances = mask * softmax_distances
-            # masked_distances = torch.where(softmax_distances < self.threshold, torch.tensor(0.0, device=softmax_distances.device), softmax_distances)
-            # return masked_distances
             return softmax_distances
-        self.interp = softmax_interp
+        
+        def softmax_interp_with_thresh(X: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
+            distances = torch.linalg.vector_norm(X - z, ord=2, dim=-1)
+            softmax_distances = torch.softmax(-distances, dim=-1)
+            mask = torch.sigmoid(softmax_distances - self.threshold)
+            masked_distances = mask * softmax_distances
+            return masked_distances
+
+        def softmax_interp_with_T_binary_thresh(X: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
+            distances = torch.linalg.vector_norm(X/self.T - z, ord=2, dim=-1)
+            softmax_distances = torch.softmax(-distances, dim=-1)
+            masked_distances = torch.where(softmax_distances < self.threshold, torch.tensor(0.0, device=softmax_distances.device), softmax_distances)
+            return masked_distances
+
+        def softmax_interp_with_T_sigmoid_thresh(X: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
+            distances = torch.linalg.vector_norm(X/self.T - z, ord=2, dim=-1)
+            softmax_distances = torch.softmax(-distances, dim=-1)
+            mask = torch.sigmoid(softmax_distances - self.threshold)
+            masked_distances = mask * softmax_distances
+            return masked_distances
+
+        if not use_T and not use_threshold:
+            self.interp = softmax_interp
+        elif not use_T and use_threshold:
+            self.interp = softmax_interp_with_thresh
+        elif use_T and not use_threshold:
+            self.interp = softmax_interp_with_T
+        elif use_T and use_threshold:
+            self.interp = softmax_interp_with_T_sigmoid_thresh
         
         # Fit artifacts
         M = len(self.inducing_points)

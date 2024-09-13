@@ -267,7 +267,7 @@ CONFIG = OmegaConf.create({
         'watch': True,
         'group': 'test',
         'entity': 'bogp',
-        'project': 'soft-gp-2',
+        'project': 'soft-gp-3',
     }
 })
 
