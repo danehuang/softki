@@ -81,14 +81,21 @@ class SoftGP(torch.nn.Module):
         else:
             self.raw_noise = noise
 
-        self.T = T
+        self.T_constraint = gpytorch.constraints.GreaterThan(5e-5)
+        T = torch.tensor([T], dtype=self.dtype, device=self.device)
+        T = self.T_constraint.inverse_transform(T)
         if True:
-            self.threshold_constraint = gpytorch.constraints.GreaterThan(1e-10)
-            threshold = torch.tensor([threshold], dtype=self.dtype, device=self.device)
-            threshold = self.threshold_constraint.inverse_transform(threshold)
+            self.register_parameter("raw_T", torch.nn.Parameter(T))
+        else:
+            self.raw_T = T
+        
+        self.threshold_constraint = gpytorch.constraints.GreaterThan(1e-10)
+        threshold = torch.tensor([threshold], dtype=self.dtype, device=self.device)
+        threshold = self.threshold_constraint.inverse_transform(threshold)
+        if False:
             self.register_parameter("raw_threshold", torch.nn.Parameter(threshold))
         else:
-            self.threshold = threshold
+            self.raw_threshold = threshold
 
         # Kernel
         self.use_scale = use_scale
@@ -111,11 +118,11 @@ class SoftGP(torch.nn.Module):
         def softmax_interp(X: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
             distances = torch.linalg.vector_norm(X/self.T - z, ord=2, dim=-1)
             softmax_distances = torch.softmax(-distances, dim=-1)
-            mask = torch.sigmoid(softmax_distances - self.threshold)
-            masked_distances = mask * softmax_distances
+            # mask = torch.sigmoid(softmax_distances - self.threshold)
+            # masked_distances = mask * softmax_distances
             # masked_distances = torch.where(softmax_distances < self.threshold, torch.tensor(0.0, device=softmax_distances.device), softmax_distances)
-
-            return masked_distances
+            # return masked_distances
+            return softmax_distances
         self.interp = softmax_interp
         
         # Fit artifacts
@@ -143,6 +150,10 @@ class SoftGP(torch.nn.Module):
     def noise(self):
         return self.noise_constraint.transform(self.raw_noise)
     
+    @property
+    def T(self):
+        return self.T_constraint.transform(self.raw_T)
+
     @property
     def threshold(self):
         return self.threshold_constraint.transform(self.raw_threshold)

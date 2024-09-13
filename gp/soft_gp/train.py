@@ -166,6 +166,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
                 "lengthscale": model.get_lengthscale(),
                 "outputscale": model.get_outputscale(),
                 "threshold": model.threshold.cpu().item(),
+                "T": model.T.cpu().item(),
                 # "K_zz_bins": wandb.Histogram(np_histogram=hist),
                 "K_zz_norm_2": np.linalg.norm(K_zz, ord='fro'),
                 "K_zz_norm_1": np.linalg.norm(K_zz, ord=1),
@@ -218,7 +219,7 @@ def eval_gp(model: SoftGP, test_dataset: Dataset, device="cuda:0", num_workers=8
     rmse = torch.sqrt(torch.sum(torch.cat(preds)) / len(test_dataset)).item()
     neg_mll = torch.sum(torch.tensor(neg_mlls))
             
-    print("RMSE:", rmse, "NEG_MLL", neg_mll.item(), "NOISE", model.noise.cpu().item(), "LENGTHSCALE", model.get_lengthscale(), "OUTPUTSCALE", model.get_outputscale(), "THRESHOLD", model.threshold.cpu().item())
+    print("RMSE:", rmse, "NEG_MLL", neg_mll.item(), "NOISE", model.noise.cpu().item(), "LENGTHSCALE", model.get_lengthscale(), "OUTPUTSCALE", model.get_outputscale(), "THRESHOLD", model.threshold.cpu().item(), "T", model.T.cpu().item())
     
     return {
         "rmse": rmse,
@@ -236,7 +237,7 @@ CONFIG = OmegaConf.create({
         'num_inducing': 512,
         'induce_init': 'kmeans',
         'noise': 1e-3,
-        'T': 5e-1,
+        'T': 5e-5,
         'threshold': 1e-2,
         'learn_noise': False,
         'solver': 'solve',
