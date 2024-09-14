@@ -21,7 +21,7 @@ do
     do
         python train.py \
             --model.name soft-gp \
-            --model.num_inducing $NUM_INDUCING \
+            --model.num_inducing 512 \
             --model.device $DEVICE \
             --model.use_qr \
             --model.use_scale \
@@ -37,7 +37,7 @@ do
 
         python train.py \
             --model.name svi-gp \
-            --model.num_inducing $NUM_INDUCING \
+            --model.num_inducing 1024 \
             --model.device $DEVICE \
             --model.learn_noise \
             --model.use_scale \
@@ -53,7 +53,7 @@ do
 
         python train.py \
             --model.name sv-gp \
-            --model.num_inducing $NUM_INDUCING \
+            --model.num_inducing 512 \
             --model.device $DEVICE \
             --model.learn_noise \
             --model.use_scale \

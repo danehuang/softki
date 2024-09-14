@@ -4,13 +4,13 @@ DEBUG=false
 
 DATA_DIR=data/uci_datasets/uci_datasets
 DATASETS=(pol elevators bike kin40k protein keggdirected slice keggundirected 3droad song buzz houseelectric)
-# DATASETS=(kin40k)
+# DATASETS=(houseelectric)
 
 GROUP=inducing
 EPOCHS=50
-NUM_INDUCING=(256 512 1024 2048 4096)
+NUM_INDUCING=(64 128 256 512 1024 1536 2048 4096)
 BATCH_SIZE=(1024)
-DEVICE="cuda:1"
+DEVICE="cuda:0"
 SEEDS=(6535 8830 92357)
 
 if $DEBUG; then
@@ -19,9 +19,10 @@ fi
 
 for dataset in "${DATASETS[@]}"
 do
-    for seed in "${SEEDS[@]}"
+    
+    for num_inducing in "${NUM_INDUCING[@]}"
     do
-        for num_inducing in "${NUM_INDUCING[@]}"
+        for seed in "${SEEDS[@]}"
         do
             for batch_size in "${BATCH_SIZE[@]}"
             do
