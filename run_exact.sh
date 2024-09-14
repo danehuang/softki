@@ -3,13 +3,15 @@
 DEBUG=false
 
 DATA_DIR=data/uci_datasets/uci_datasets
-DATASETS=(pol elevators bike kin40k protein keggdirected slice keggundirected 3droad song buzz houseelectric)
+# DATASETS=(pol elevators bike kin40k protein keggdirected slice keggundirected 3droad song buzz houseelectric)
+DATASETS=(pol elevators)
+# DATASETS=(pol)
 
-GROUP=benchmark7
-EPOCHS=50
-NUM_INDUCING=512
-DEVICE="cuda:1"
+GROUP=benchmark
+EPOCHS=100
+DEVICE="cuda:0"
 SEEDS=(6535 8830 92357)
+# SEEDS=(6535)
 
 if $DEBUG; then
     EPOCHS=1
@@ -27,7 +29,7 @@ do
             --dataset.name $dataset \
             --training.seed $seed \
             --training.epochs $EPOCHS \
-            --training.learning_rate 0.01 \
+            --training.learning_rate 0.1 \
             --dataset.train_frac 0.9 \
             --dataset.val_frac 0 \
             --wandb.group $GROUP \
