@@ -138,7 +138,7 @@ class SoftGPDeriv(torch.nn.Module):
         softmax_distances = torch.softmax(-distances, dim=-1)
         W_xz = softmax_distances
         softmax_deriv = softmax_distances * (1 - softmax_distances)
-        W_xz_deriv = (softmax_deriv.unsqueeze(-1) * diff / distances.unsqueeze(-1)).transpose(2, 1)
+        W_xz_deriv = -(softmax_deriv.unsqueeze(-1) * diff / distances.unsqueeze(-1)).transpose(2, 1)
         W_xz_full = torch.cat([W_xz, W_xz_deriv.reshape(-1, z.shape[0])], dim=0)
         # print("W_xz", W_xz.shape, "dW_xz", W_xz_deriv.shape, "concat", W_xz_full.shape)
         return W_xz_full

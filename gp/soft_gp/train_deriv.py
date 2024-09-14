@@ -295,9 +295,9 @@ CONFIG = OmegaConf.create({
 
 class SineDataset(Dataset):
     def __init__(self):
-        self.xs = torch.linspace(-1, 1, 100).unsqueeze(-1)
+        self.xs = torch.linspace(-3, 3, 100).unsqueeze(-1)
         self.ys = torch.sin(self.xs).unsqueeze(-1)
-        self.dys = torch.cos(self.ys).unsqueeze(-1)
+        self.dys = torch.cos(self.xs).unsqueeze(-1)
         self.dim = 1
 
     def __getitem__(self, idx) -> Any:
