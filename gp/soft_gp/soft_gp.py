@@ -147,7 +147,10 @@ class SoftGP(torch.nn.Module):
         if not use_T and not use_threshold:
             self.interp = softmax_interp
         elif not use_T and use_threshold:
-            self.interp = softmax_interp_with_thresh
+            if learn_threshold:
+                self.interp = softmax_interp_with_thresh
+            else:
+                self.interp = softmax_interp_with_T_binary_thresh
         elif use_T and not use_threshold:
             self.interp = softmax_interp_with_T
         elif use_T and use_threshold:
