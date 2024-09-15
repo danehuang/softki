@@ -132,7 +132,7 @@ class SoftGP(torch.nn.Module):
             return masked_distances
 
         def softmax_interp_with_T_binary_thresh(X: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
-            distances = torch.linalg.vector_norm(X/self.T - z, ord=2, dim=-1)
+            distances = torch.linalg.vector_norm(X - z, ord=2, dim=-1)
             softmax_distances = torch.softmax(-distances, dim=-1)
             masked_distances = torch.where(softmax_distances < self.threshold, torch.tensor(0.0, device=softmax_distances.device), softmax_distances)
             return masked_distances
