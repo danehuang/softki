@@ -11,9 +11,10 @@ All rights reserved.
 """
 
 class HutchinsonPseudoLoss:
-    def __init__(self, model, num_trace_samples=10):
+    def __init__(self, model, num_trace_samples=10,vector_format="randn"):
         self.model = model
         self.x0 = None
+        self.vf = vector_format
         self.num_trace_samples = num_trace_samples
 
     def update_x0(self, full_rhs):
@@ -59,21 +60,14 @@ class HutchinsonPseudoLoss:
         num_data = function_dist.event_shape.numel()
         return res.div_(num_data)
 
-    # def get_rhs_and_probes(self, rhs, num_random_probes):
-    #     probe_vectors = torch.randn(
-    #         rhs.shape[-1], num_random_probes, device=rhs.device, dtype=rhs.dtype
-    #     ).contiguous()
-    #     full_rhs = torch.cat((rhs.unsqueeze(-1), probe_vectors), -1)
-    #     return full_rhs, probe_vectors
     
     def get_rhs_and_probes(self, rhs, num_random_probes):
         dim = rhs.shape[-1]
-        probe_vectors = torch.randn(dim, num_random_probes, device=rhs.device, dtype=rhs.dtype)
-        probe_vectors = probe_vectors / probe_vectors.norm(dim=0) 
         
-        # Concatenate the original rhs with the probe vectors
+        probe_vectors = torch.randn(dim, num_random_probes, device=rhs.device, dtype=rhs.dtype).contiguous()
+        if self.vf=="sphere":
+            probe_vectors = probe_vectors / probe_vectors.norm(dim=0) 
         full_rhs = torch.cat((rhs.unsqueeze(-1), probe_vectors), -1)
-    
         return full_rhs, probe_vectors
     
     def __call__(self, mean, cov_mat, target, *params):

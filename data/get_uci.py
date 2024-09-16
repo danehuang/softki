@@ -162,7 +162,7 @@ if __name__ == "__main__":
     if not os.path.exists("./uci_datasets"):
         print("trying to clone")
         subprocess.run(["git clone git@github.com:treforevans/uci_datasets.git"], shell=True)
-    base_dir = r"C:\Users\chris\Desktop\soft-gp\data\uci_datasets\uci_datasets"
+    base_dir = r"/Users/pren/Research/soft-gp/data/uci_datasets/uci_datasets"
 
     for dataset in datasets:
         gz_file_path = os.path.join(base_dir, dataset, "data.csv.gz")
