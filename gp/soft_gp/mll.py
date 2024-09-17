@@ -60,16 +60,15 @@ class HutchinsonPseudoLoss:
         num_data = function_dist.event_shape.numel()
         return res.div_(num_data)
 
-    
     def get_rhs_and_probes(self, rhs, num_random_probes):
         dim = rhs.shape[-1]
         
         probe_vectors = torch.randn(dim, num_random_probes, device=rhs.device, dtype=rhs.dtype).contiguous()
-        if self.vf == "sphere":
-            probe_vectors = probe_vectors / probe_vectors.norm(dim=0) 
+        # if self.vf == "sphere":
+        #     probe_vectors = probe_vectors / probe_vectors.norm(dim=0) 
         full_rhs = torch.cat((rhs.unsqueeze(-1), probe_vectors), -1)
         return full_rhs, probe_vectors
-    
+
     def __call__(self, mean, cov_mat, target, *params):
         return self.forward(mean, cov_mat, target, *params)
     
