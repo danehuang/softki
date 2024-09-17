@@ -20,8 +20,8 @@ from gpytorch.kernels import ScaleKernel, RBFKernel
 # Dataset helper
 # ---------------------------------------------------------
 
-def flatten_dataset(dataset: Dataset, collate_fn=None) -> Tuple[torch.Tensor, torch.Tensor]:
-    train_loader = DataLoader(dataset, batch_size=8192, shuffle=False, collate_fn=collate_fn)
+def flatten_dataset(dataset: Dataset, collate_fn=None, batch_size=8192) -> Tuple[torch.Tensor, torch.Tensor]:
+    train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
     train_x = []
     train_y = []
     for batch_x, batch_y in tqdm(train_loader):
