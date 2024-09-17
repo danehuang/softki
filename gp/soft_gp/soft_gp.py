@@ -145,15 +145,20 @@ class SoftGP(torch.nn.Module):
             return masked_distances
 
         if not use_T and not use_threshold:
+            print("Using softmax_interp")
             self.interp = softmax_interp
         elif not use_T and use_threshold:
             if learn_threshold:
+                print("Using softmax_interp_with_thresh")
                 self.interp = softmax_interp_with_thresh
             else:
+                print("Using softmax_interp_with_T_binary_thresh")
                 self.interp = softmax_interp_with_T_binary_thresh
         elif use_T and not use_threshold:
+            print("Using softmax_interp_with_T")
             self.interp = softmax_interp_with_T
         elif use_T and use_threshold:
+            print("Using softmax_interp_with_T_sigmoid_thresh")
             self.interp = softmax_interp_with_T_sigmoid_thresh
         
         # Fit artifacts

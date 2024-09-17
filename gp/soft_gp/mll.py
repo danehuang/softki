@@ -11,7 +11,7 @@ All rights reserved.
 """
 
 class HutchinsonPseudoLoss:
-    def __init__(self, model, num_trace_samples=10,vector_format="randn"):
+    def __init__(self, model, num_trace_samples=10, vector_format="randn"):
         self.model = model
         self.x0 = None
         self.vf = vector_format
@@ -65,7 +65,7 @@ class HutchinsonPseudoLoss:
         dim = rhs.shape[-1]
         
         probe_vectors = torch.randn(dim, num_random_probes, device=rhs.device, dtype=rhs.dtype).contiguous()
-        if self.vf=="sphere":
+        if self.vf == "sphere":
             probe_vectors = probe_vectors / probe_vectors.norm(dim=0) 
         full_rhs = torch.cat((rhs.unsqueeze(-1), probe_vectors), -1)
         return full_rhs, probe_vectors
