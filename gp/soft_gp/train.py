@@ -182,9 +182,9 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
                 "K_zz_norm_2": np.linalg.norm(K_zz, ord='fro'),
                 "K_zz_norm_1": np.linalg.norm(K_zz, ord=1),
                 "K_zz_norm_inf": np.linalg.norm(K_zz, ord=np.inf),
-                "W_xz_norm_2": np.linalg.norm(model.W_xz_cpu, ord='fro'),
-                "W_xz_norm_1": np.linalg.norm(model.W_xz_cpu, ord=1),
-                "W_xz_norm_inf": np.linalg.norm(model.W_xz_cpu, ord=np.inf),
+                # "W_xz_norm_2": np.linalg.norm(model.W_xz_cpu, ord='fro'),
+                # "W_xz_norm_1": np.linalg.norm(model.W_xz_cpu, ord=1),
+                # "W_xz_norm_inf": np.linalg.norm(model.W_xz_cpu, ord=np.inf),
             }
             for cnt, edge in zip(hist[0], hist[1]):
                 results[f"K_zz_bin_{edge}"] = cnt
@@ -218,7 +218,7 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
     return model
 
 
-def eval_gp(model: SoftGP, test_dataset: Dataset, device="cuda:0", num_workers=8) -> float:
+def eval_gp(model: SoftGP, test_dataset: Dataset, device="cuda:0", num_workers=0) -> float:
     preds = []
     neg_mlls = []
     test_loader = DataLoader(test_dataset, batch_size=1024, shuffle=False, num_workers=num_workers)
@@ -265,7 +265,7 @@ CONFIG = OmegaConf.create({
     },
     'dataset': {
         'name': 'elevators',
-        'num_workers': 1,
+        'num_workers': 0,
         'train_frac': 4/9,
         'val_frac': 3/9,
     },

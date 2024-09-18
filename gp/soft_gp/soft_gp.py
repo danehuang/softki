@@ -77,13 +77,14 @@ class SoftGP(torch.nn.Module):
         self.fit_chunk_size = fit_chunk_size
 
         # Noise
-        self.noise_constraint = gpytorch.constraints.Positive()
-        noise = torch.tensor([noise], dtype=self.dtype, device=self.device)
-        noise = self.noise_constraint.inverse_transform(noise)
+        self.learn_noise = learn_noise
         if learn_noise:
+            self.noise_constraint = gpytorch.constraints.Positive()
+            noise = torch.tensor([noise], dtype=self.dtype, device=self.device)
+            noise = self.noise_constraint.inverse_transform(noise)
             self.register_parameter("raw_noise", torch.nn.Parameter(noise))
         else:
-            self.raw_noise = noise
+            self.raw_noise = torch.tensor([noise], dtype=self.dtype, device=self.device)
 
         self.use_T = use_T
         self.T_constraint = gpytorch.constraints.GreaterThan(5e-5)
@@ -184,7 +185,10 @@ class SoftGP(torch.nn.Module):
     
     @property
     def noise(self):
-        return self.noise_constraint.transform(self.raw_noise)
+        if self.learn_noise:
+            return self.noise_constraint.transform(self.raw_noise)
+        else:
+            return self.raw_noise
     
     @property
     def T(self):
@@ -301,7 +305,8 @@ class SoftGP(torch.nn.Module):
             mean = torch.zeros(len(X), dtype=self.dtype, device=self.device)
             
             # 2. covariance: Q_xx = W_xz K_zz K_zx + noise I
-            cov_mat = W_xz @ K_zz @ W_xz.T 
+            cov_mat = W_xz @ K_zz @ W_xz.T
+            # cov_mat.fill_diagonal_(cov_mat.diagonal() + self.noise)
             cov_mat += torch.eye(cov_mat.shape[1], dtype=self.dtype, device=self.device) * self.noise
 
             # 3. log N(y | mu, Q_xx) \appox 
@@ -416,7 +421,7 @@ class SoftGP(torch.nn.Module):
                     W_xz = self._interp(X_batch)
                     torch.matmul(W_xz, K_zz, out=self.fit_buffer[start:N,:])
         
-                self.W_xz_cpu = self.fit_buffer[:N, :].detach().cpu()
+                # self.W_xz_cpu = self.fit_buffer[:N, :].detach().cpu()
 
         with torch.no_grad():
             # B^T = [(Lambda^{-1/2} \hat{K}_xz) U_zz ]
