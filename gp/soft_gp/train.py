@@ -265,7 +265,7 @@ CONFIG = OmegaConf.create({
     },
     'dataset': {
         'name': 'elevators',
-        'num_workers': 0,
+        'num_workers': 1,
         'train_frac': 4/9,
         'val_frac': 3/9,
     },
