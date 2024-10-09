@@ -113,7 +113,7 @@ if __name__ == "__main__":
     elif config.dataset.name == "buckyball-catcher":
         dataset = MD22_Buckyball_Catcher_Dataset(f"{args.data_dir}/md22_buckyball-catcher.npz")
     elif config.dataset.name == "double-walled-nanotube":
-        dataset = MD22_DoubleWalledNanotube_Dataset(f"{args.data_dir}/md22_double-walled-nanotube.npz")
+        dataset = MD22_DoubleWalledNanotube_Dataset(f"{args.data_dir}/md22_double-walled_nanotube.npz")
     else:
         raise ValueError(f"Dataset {config.dataset.name} not supported ...")
     
