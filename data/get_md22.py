@@ -282,6 +282,98 @@ class MD22_DNA_AT_AT_CG_CG_Dataset(MD22Dataset):
         super(MD22_DNA_AT_AT_CG_CG_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, flat=True, coulomb=coulomb, get_forces=get_forces)
 
 
+# =============================================================================
+# Buckyball Catcher
+# =============================================================================
+
+def get_buckyball_catcher():
+    if not exists('./md22_buckyball-catcher.npz'):
+        url = "http://www.quantum-machine.org/gdml/repo/datasets/md22_buckyball-catcher.npz"
+        
+        response = requests.get(url, stream=True)
+        with open("./md22_buckyball-catcher.npz", "wb") as f:
+            for data in tqdm(response.iter_content()):
+                f.write(data)
+
+    data = np.load("./md22_buckyball-catcher.npz")
+    print(data.keys())
+    print(data["R"].shape)
+    print(data["name"])
+
+    dataset = MD22_Buckyball_Catcher_Dataset(npz_file="./md22_buckyball-catcher.npz", standarize=STANDARDIZE)
+    dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
+    for x, y in tqdm(dataloader):
+        pass
+
+    M = 10
+    A = len(dataset.zs)
+    subset = np.stack([np.random.choice(A, 4, replace=False) for _ in range(M)])
+    sections = np.concatenate([3*subset, 3*subset+1, 3*subset+2], axis=1)
+    indices = torch.from_numpy(sections)
+    features, labels = zip(*[(torch.tensor(features), torch.tensor(labels)) for features, labels in dataset])
+    features = torch.stack(features).squeeze(-1)
+    labels = torch.stack(labels).squeeze(-1)
+    dataset2 = CoulombMD22Dataset(dataset.zs, features, labels, subset, indices)
+    dataloader = DataLoader(dataset2, batch_size=1024)
+    for x, y in tqdm(dataloader):
+        print(x.shape, y.shape)
+
+
+class MD22_Buckyball_Catcher_Dataset(MD22Dataset):
+    """
+    N = 6102
+    D = 148 x 3 = 444
+    """    
+    def __init__(self, npz_file="./md22_buckyball-catcher.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, coulomb=COULOMB, get_forces=False):
+        super(MD22_Buckyball_Catcher_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, flat=False, coulomb=coulomb, get_forces=get_forces)
+
+
+# =============================================================================
+# Double-Walled Nanotub
+# =============================================================================
+
+def get_double_walled_nanotube():
+    if not exists('./md22_double-walled_nanotube.npz'):
+        url = "http://www.quantum-machine.org/gdml/repo/datasets/md22_double-walled_nanotube.npz"
+        
+        response = requests.get(url, stream=True)
+        with open("./md22_double-walled_nanotube.npz", "wb") as f:
+            for data in tqdm(response.iter_content()):
+                f.write(data)
+
+    data = np.load("./md22_double-walled_nanotube.npz")
+    print(data.keys())
+    print(data["R"].shape)
+    print(data["name"])
+
+    dataset = MD22_DoubleWalledNanotube_Dataset(npz_file="./md22_double-walled_nanotube.npz", standarize=STANDARDIZE)
+    dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
+    for x, y in tqdm(dataloader):
+        pass
+
+    M = 10
+    A = len(dataset.zs)
+    subset = np.stack([np.random.choice(A, 4, replace=False) for _ in range(M)])
+    sections = np.concatenate([3*subset, 3*subset+1, 3*subset+2], axis=1)
+    indices = torch.from_numpy(sections)
+    features, labels = zip(*[(torch.tensor(features), torch.tensor(labels)) for features, labels in dataset])
+    features = torch.stack(features).squeeze(-1)
+    labels = torch.stack(labels).squeeze(-1)
+    dataset2 = CoulombMD22Dataset(dataset.zs, features, labels, subset, indices)
+    dataloader = DataLoader(dataset2, batch_size=1024)
+    for x, y in tqdm(dataloader):
+        print(x.shape, y.shape)
+
+
+class MD22_DoubleWalledNanotube_Dataset(MD22Dataset):
+    """
+    N = 5032
+    D = 370 x 3 = 1110
+    """    
+    def __init__(self, npz_file="./md22_double-walled_nanotube.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, coulomb=COULOMB, get_forces=False):
+        super(MD22_DoubleWalledNanotube_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, flat=False, coulomb=coulomb, get_forces=get_forces)
+
+
 class CoulombMD22Dataset(Dataset):
     def __init__(self, zs, features, labels, subset, indices) -> None:
         super().__init__()
@@ -316,8 +408,11 @@ class CoulombMD22Dataset(Dataset):
 
 
 if __name__ == "__main__":
-    get_AcAla3NHME()
-    get_DHA()
-    get_stachyose()
-    get_dna_at_at()
-    get_dna_at_at_cg_cg()
+    # get_AcAla3NHME()
+    # get_DHA()
+    # get_stachyose()
+    # get_dna_at_at()
+    # get_dna_at_at_cg_cg()
+    get_buckyball_catcher()
+    get_double_walled_nanotube()
+    

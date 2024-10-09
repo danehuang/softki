@@ -3,11 +3,11 @@
 DEBUG=false
 
 DATA_DIR=data/
-DATASETS=(Ac-Ala3-NHMe AT-AT-CG-CG AT-AT stachyose DHA)
+# DATASETS=(Ac-Ala3-NHMe AT-AT-CG-CG AT-AT stachyose DHA buckyball-catcher double-walled-nanotube)
+DATASETS=(buckyball-catcher double-walled-nanotube)
 
 GROUP=md22
 EPOCHS=50
-NUM_INDUCING=1024
 DEVICE="cuda:1"
 SEEDS=(6535 8830 92357)
 
@@ -25,6 +25,7 @@ do
             --model.device $DEVICE \
             --model.use_qr \
             --model.use_scale \
+            --model.T 1 \
             --data_dir $DATA_DIR \
             --dataset.name $dataset \
             --training.seed $seed \

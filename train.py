@@ -30,6 +30,8 @@ if __name__ == "__main__":
         MD22_DNA_AT_AT_CG_CG_Dataset,
         MD22_DNA_AT_AT_Dataset,
         MD22_Stachyose_Dataset,
+        MD22_Buckyball_Catcher_Dataset,
+        MD22_DoubleWalledNanotube_Dataset,
     )
 
     # Omega config to argparse
@@ -108,6 +110,10 @@ if __name__ == "__main__":
         dataset = MD22_Stachyose_Dataset(f"{args.data_dir}/md22_stachyose.npz")
     elif config.dataset.name == "DHA":
         dataset = MD22_DHA_Dataset(f"{args.data_dir}/md22_DHA.npz")
+    elif config.dataset.name == "buckyball-catcher":
+        dataset = MD22_Buckyball_Catcher_Dataset(f"{args.data_dir}/md22_buckyball-catcher.npz")
+    elif config.dataset.name == "double-walled-nanotube":
+        dataset = MD22_DoubleWalledNanotube_Dataset(f"{args.data_dir}/md22_double-walled-nanotube.npz")
     else:
         raise ValueError(f"Dataset {config.dataset.name} not supported ...")
     
