@@ -23,13 +23,12 @@ def get_install_requires():
 
 # This call to setup() does all the work
 setup(
-    name="Soft Gaussian Processes",
+    name="Soft Kernel Interpolation",
     version="0.1.0",
-    description="Soft Gaussian Processes",
+    description="Soft Kernel Interpolation",
     long_description=README,
     long_description_content_type="text/markdown",
-    url="https://github.com/danehuang/soft-gp",
-    author="The PusH Authors",
+    author="The SoftKI Authors",
     author_email="",
     license="Apache 2.0",
     classifiers=[
