@@ -26,6 +26,7 @@ do
             --model.use_qr \
             --model.use_scale \
             --model.learn_noise \
+            --model.T 1 \
             --data_dir $DATA_DIR \
             --dataset.name $dataset \
             --training.seed $seed \
