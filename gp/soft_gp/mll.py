@@ -1,7 +1,7 @@
 from gpytorch.distributions import MultivariateNormal
 import torch
-
-
+from gpytorch.functions import pivoted_cholesky
+from gpytorch.settings import max_preconditioner_size
 from linear_solver.preconditioner import _default_preconditioner
 
 
@@ -29,27 +29,47 @@ class HutchinsonPseudoLoss:
             num_random_probes=self.num_trace_samples
         )
         kxx = function_dist.lazy_covariance_matrix.evaluate_kernel()
-
-        # Cholesky Woodbury matrix preconditioner
-        precond, *_ = kxx._preconditioner()
-        if precond is None:
-            precond = _default_preconditioner
-            
         forwards_matmul = kxx.matmul
-        
-        x0 = self.update_x0(full_rhs)
-        result = self.model._solve_system(
-            kxx,
-            full_rhs,
-            x0=x0,
-            forwards_matmul=forwards_matmul,
-            precond=precond
-        )
+
+        if self.model.hutch_solver=="solve":
+            with torch.no_grad():
+                result = torch.linalg.solve(kxx, full_rhs)
+                result = torch.nan_to_num(result)
+        else:
+            # Cholesky Woodbury matrix preconditioner
+            k = 10  # Number of steps for the decomposition
+            # input: Anysor, rank: int, error_tol: Optional[float] = None, return_pivots: bool = False        # Greedy nystrom ! 
+            L_k = pivoted_cholesky(kxx, rank=k)
+            def preconditioner(v):
+                # sigma_sq = 1e-2  # Regularization term, can be adjusted based on problem
+                # Woodbury-based preconditioner P^{-1}v
+                P_inv_v = (v / 1e-3) - torch.matmul(
+                    L_k,
+                    torch.linalg.solve(
+                        torch.eye(L_k.size(1)) + (1 / 1e-3) * torch.matmul(L_k.T, L_k),
+                        torch.matmul(L_k.T, v)
+                    )
+                )
+                return P_inv_v
+            
+            precond=preconditioner
+            if precond is None:
+                print("precon was none")
+                precond = _default_preconditioner
+                
+            x0 = self.update_x0(full_rhs)
+            result = self.model._solve_system(
+                kxx,
+                full_rhs,
+                x0=x0,
+                forwards_matmul=forwards_matmul,
+                precond=precond
+            )
         
         self.x0 = result.clone()
-        return self.compute_pseudo_loss(forwards_matmul, result, probe_vectors, function_dist)
+        return self.compute_pseudo_loss(forwards_matmul, result, probe_vectors, mean.shape[0])
 
-    def compute_pseudo_loss(self, forwards_matmul, solve, probe_vectors, function_dist):
+    def compute_pseudo_loss(self, forwards_matmul, solve, probe_vectors, num_data):
         data_solve = solve[..., 0].unsqueeze(-1).contiguous()
         data_term = (-data_solve * forwards_matmul(data_solve).float()).sum(-2) / 2
         logdet_term = (
@@ -57,7 +77,7 @@ class HutchinsonPseudoLoss:
             / (2 * probe_vectors.shape[-1])
         )
         res = -data_term - logdet_term.sum(-1)
-        num_data = function_dist.event_shape.numel()
+        #num_data = function_dist.event_shape.numel()
         return res.div_(num_data)
 
     def get_rhs_and_probes(self, rhs, num_random_probes):

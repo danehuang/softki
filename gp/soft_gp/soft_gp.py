@@ -46,6 +46,8 @@ class SoftGP(torch.nn.Module):
         mll_approx="hutchinson",
         fit_chunk_size=1024,
         use_qr=False,
+        hutch_solver ="solve"
+        
     ) -> None:
         # Argument checking 
         methods = ["solve", "cholesky", "cg"]
@@ -75,6 +77,7 @@ class SoftGP(torch.nn.Module):
         # Fit settings
         self.use_qr = use_qr
         self.fit_chunk_size = fit_chunk_size
+        self.hutch_solver = hutch_solver
 
         # Noise
         self.learn_noise = learn_noise
