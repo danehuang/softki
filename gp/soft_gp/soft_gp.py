@@ -19,6 +19,7 @@ from linear_operator.utils.cholesky import psd_safe_cholesky
 # Our imports
 from gp.soft_gp.mll import HutchinsonPseudoLoss
 from linear_solver.cg import linear_cg
+from linear_solver.preconditioner import woodbury_preconditioner
 
 
 # =============================================================================
@@ -384,26 +385,12 @@ class SoftGP(torch.nn.Module):
 
         # Safe solve A \alpha = b
         A = DenseLinearOperator(A)
-        k = 10  # Number of steps for the decomposition
-        # input: Anysor, rank: int, error_tol: Optional[float] = None, return_pivots: bool = False        # Greedy nystrom ! 
-        L_k = pivoted_cholesky(A, rank=k)
-        def preconditioner(v):
-            # sigma_sq = 1e-2  # Regularization term, can be adjusted based on problem
-            # Woodbury-based preconditioner P^{-1}v
-            P_inv_v = (v / 1e-3) - torch.matmul(
-                L_k,
-                torch.linalg.solve(
-                    torch.eye(L_k.size(1)) + (1 / 1e-3) * torch.matmul(L_k.T, L_k),
-                    torch.matmul(L_k.T, v)
-                )
-            )
-            return P_inv_v
         self.alpha, use_pinv = self._solve_system(
             A,
             b.unsqueeze(1),
             x0=torch.zeros_like(b),
             forwards_matmul=A.matmul,
-            precond=None,
+            precond=woodbury_preconditioner(A, k=10, device=self.device),
             return_pinv=True
         )
 
