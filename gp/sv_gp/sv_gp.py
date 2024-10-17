@@ -124,13 +124,11 @@ def train_gp(config, train_dataset, test_dataset):
     kmeans.fit(train_x)
     centers = kmeans.cluster_centers_
     inducing_points = torch.tensor(centers).to(dtype=dtype, device=device)
-    # inducing_points = torch.rand(num_inducing, train_dataset.dim).to(device=device)
 
     train_x = train_x.to(dtype=dtype, device=device)
     train_y = train_y.to(dtype=dtype, device=device)
 
     # Model
-    # inducing_points = train_x[:num_inducing, :].clone() # torch.rand(num_inducing, D).cuda()
     likelihood = gpytorch.likelihoods.GaussianLikelihood(noise_constraint=GreaterThan(noise_constraint)).to(device=device)
     likelihood.noise = torch.tensor([noise]).to(device=device)
     model = SGPRModel(kernel, train_x, train_y, likelihood, inducing_points=inducing_points, use_scale=use_scale).to(device=device)

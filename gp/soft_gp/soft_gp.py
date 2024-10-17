@@ -425,13 +425,10 @@ class SoftGP(torch.nn.Module):
                     W_xz = self._interp(X_batch)
                     torch.matmul(W_xz, K_zz, out=self.fit_buffer[start:N,:])
         
-                # self.W_xz_cpu = self.fit_buffer[:N, :].detach().cpu()
-
         with torch.no_grad():
             # B^T = [(Lambda^{-1/2} \hat{K}_xz) U_zz ]
             psd_safe_cholesky(K_zz, out=self.U_zz, upper=True, max_tries=10)
             # Lambda_half_inv_diag = (1 / torch.sqrt(self.noise)) * torch.ones(N, dtype=self.dtype).to(self.device)
-            # self.fit_buffer[:N,:] = Lambda_half_inv_diag.unsqueeze(1) * hat_K_xz
             self.fit_buffer[:N,:] *= 1 / torch.sqrt(self.noise)
             self.fit_buffer[N:,:] = self.U_zz
 
@@ -447,7 +444,6 @@ class SoftGP(torch.nn.Module):
             torch.linalg.solve_triangular(self.R, (self.Q.T[:, 0:N] @ self.fit_b).unsqueeze(1), upper=True, out=self.alpha).squeeze(1)
 
             # Store for fast inference
-            # self.K_zz_alpha = K_zz @ alpha
             torch.matmul(K_zz, self.alpha.squeeze(-1), out=self.K_zz_alpha)
 
         return False

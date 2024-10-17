@@ -182,9 +182,6 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
                 "K_zz_norm_2": np.linalg.norm(K_zz, ord='fro'),
                 "K_zz_norm_1": np.linalg.norm(K_zz, ord=1),
                 "K_zz_norm_inf": np.linalg.norm(K_zz, ord=np.inf),
-                # "W_xz_norm_2": np.linalg.norm(model.W_xz_cpu, ord='fro'),
-                # "W_xz_norm_1": np.linalg.norm(model.W_xz_cpu, ord=1),
-                # "W_xz_norm_inf": np.linalg.norm(model.W_xz_cpu, ord=np.inf),
             }
             for cnt, edge in zip(hist[0], hist[1]):
                 results[f"K_zz_bin_{edge}"] = cnt
@@ -194,11 +191,6 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
                 np.save("array.npy", model.inducing_points.detach().cpu().numpy()) 
                 artifact.add_file("array.npy")
                 wandb.log_artifact(artifact)
-
-                # artifact = wandb.Artifact(f"W_xz_{rname}_{epoch}", type="parameters")
-                # np.save("W_xz.npy", model.W_xz_cpu.numpy()) 
-                # artifact.add_file("W_xz.npy")
-                # wandb.log_artifact(artifact)
 
                 artifact = wandb.Artifact(f"K_zz_{rname}_{epoch}", type="parameters")
                 np.save("K_zz.npy", K_zz) 
@@ -259,7 +251,8 @@ CONFIG = OmegaConf.create({
         'cg_tolerance': 1e-5,
         'mll_approx': 'hutchinson',
         'fit_chunk_size': 1024,
-        'use_qr': False,
+        'use_qr': True,
+        'hutch_solver': 'solve',
         'dtype': 'float32',
         'device': 'cpu',
     },

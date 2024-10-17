@@ -238,7 +238,6 @@ def eval_gp(model, likelihood, test_dataset, device="cuda:0", num_workers=4):
         means = output.mean.cpu()
         stds = output.variance.sqrt().cpu()
         nll = -torch.distributions.Normal(means, stds).log_prob(test_y).mean()
-        # se = torch.sum((likelihood(model(test_x.to(device=device))).mean.cpu() - test_y)**2)
         se = torch.sum((means - test_y)**2)
         squared_errors += [se]
         nlls += [nll]
