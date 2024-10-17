@@ -2,7 +2,34 @@
 
 
 
+## Quick Start
+
+1. Create environment
+
+```
+conda create --name softgp python=3.12
+pip install -r requirements.txt
+pip install -e .
+```
+
+2. Get data and run benchmarks
+
+```
+./run_all.sh
+```
+
+
 ## Environnment
+
+### Quick Install
+
+```
+conda create --name softgp python=3.12
+pip install -r requirements.txt
+pip install -e .
+```
+
+### Manual Install
 
 ```
 conda create --name softgp python=3.12
@@ -34,33 +61,46 @@ python get_md22.py
 
 ## Run
 
+Run `soft-gp` on `pol` dataset
+
 ```
-python train.py
+python train.py \
+    --model.name soft-gp \
+    --model.num_inducing 512 \
+    --model.device cuda:0 \
+    --model.use_qr \
+    --model.use_scale \
+    --model.mll_approx hutchinson \
+    --data_dir data/uci_datasets/uci_datasets \
+    --dataset.name pol \
+    --training.seed 6535 \
+    --training.epochs 50 \
+    --training.learning_rate 0.01 \
 ```
+
 
 ## Reproducing Experiments
 
 ### UCI
 
-1. Make sure you have downloaded UCI data. Run GPs `./run_uci.sh`
+1. Make sure you have downloaded UCI data. Run GPs `./scripts/run_uci.sh`
 
 2. Run analysis `./analysis/comparison.ipynb`
 
 ### MD22
 
-1. Make sure you have downloaded MD22 data.  Run GPs `./run_md22.sh`
+1. Make sure you have downloaded MD22 data.  Run GPs `./scripts/run_md22.sh`
 
 2. Run analysis `./analysis/md22.ipynb`
 
 ### Noise
 
-1. Run noise experiments `./run_noise.sh`
+1. Run noise experiments `./scripts/run_noise.sh`
 
 2. Run analysis `./analysis/noise.ipynb`
 
 ### Noise
 
-1. Run inducing experiments `./run_inducing.sh`
+1. Run inducing experiments `./scripts/run_inducing.sh`
 
 2. Run analysis `./analysis/inducing.ipynb`
-

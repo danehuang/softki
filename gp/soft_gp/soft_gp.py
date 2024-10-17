@@ -4,7 +4,6 @@ from typing import *
 # Common data science imports
 import numpy as np
 import torch
-from torchviz import make_dot
 
 
 # Gpytorch and linear_operator
