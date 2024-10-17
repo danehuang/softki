@@ -1,11 +1,7 @@
 from os.path import exists
 import requests
-import tarfile
-from zipfile import ZipFile 
 
 import numpy as np
-import pandas as pd
-from scipy.io import arff
 from sklearn.preprocessing import StandardScaler
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -13,27 +9,6 @@ from tqdm import tqdm
 
 
 STANDARDIZE = True
-COULOMB = False
-
-# def torch_dist_mat(x):
-#     num_points = x.size(0)
-#     tensor1 = x.unsqueeze(1).expand(-1, num_points, -1)
-#     tensor2 = x.unsqueeze(0).expand(num_points, -1, -1)
-#     distance_matrix = torch.linalg.vector_norm(tensor1 - tensor2, dim=2, ord=1)
-#     return distance_matrix
-
-
-def coulomb_desc(zs, x):
-    A = len(zs)
-    radii = torch.cdist(x.unsqueeze(0), x.unsqueeze(0))
-    radii[:, torch.arange(A), torch.arange(A)] = 1
-    radii = radii.squeeze(0).clip(0, 1e6)
-    M = zs.unsqueeze(1) @ zs.unsqueeze(0)
-    M = M / radii
-    M[torch.arange(A), torch.arange(A)] = 0.5*zs**2.4
-    upper_tri_indices = torch.triu_indices(M.size(0), M.size(1), offset=0)
-    upper_triangular_flat = M[upper_tri_indices[0], upper_tri_indices[1]]
-    return upper_triangular_flat
 
 
 # =============================================================================
@@ -41,18 +16,14 @@ def coulomb_desc(zs, x):
 # =============================================================================
 
 class MD22Dataset(Dataset):
-    def __init__(self, npz_file="./md22_DHA.npz", dtype=torch.float32, transform=None, standarize=False, flat=False, center=True, coulomb=False, get_forces=False):
+    def __init__(self, npz_file="./md22_DHA.npz", dtype=torch.float32, transform=None, standarize=False, flat=False, center=True, get_forces=False):
         self.raw_data = np.load(npz_file)
         self.coords = []
         self.energies = []
         self.get_forces = get_forces
         self.forces = []
         for x, e, f in tqdm(zip(self.raw_data["R"], self.raw_data["E"], self.raw_data["F"])):
-            if coulomb:
-                self.coords += [coulomb_desc(torch.tensor(self.raw_data["z"].flatten()).to(dtype), torch.tensor(x).to(dtype))]
-                # print(self.coords[-1].min(), self.coords[-1].max())
-            else:
-                self.coords += [torch.tensor(x.flatten())]
+            self.coords += [torch.tensor(x.flatten())]
             if flat:
                 self.energies += [e[0]]
             else:
@@ -130,8 +101,8 @@ class MD22_AcAla3NHME_Dataset(MD22Dataset):
     N = 85109
     D = 42 x 3 = 126
     """    
-    def __init__(self, npz_file="./md22_Ac-Ala3-NHMe.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, coulomb=COULOMB, get_forces=False):
-        super(MD22_AcAla3NHME_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, flat=True, coulomb=coulomb, get_forces=get_forces)
+    def __init__(self, npz_file="./md22_Ac-Ala3-NHMe.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, get_forces=False):
+        super(MD22_AcAla3NHME_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, flat=True, get_forces=get_forces)
 
 
 # =============================================================================
@@ -165,8 +136,8 @@ class MD22_DHA_Dataset(MD22Dataset):
     N = 69753
     D = 56 x 3 = 168
     """    
-    def __init__(self, npz_file="./md22_DHA.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, coulomb=COULOMB, get_forces=False):
-        super(MD22_DHA_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, coulomb=coulomb, get_forces=get_forces)
+    def __init__(self, npz_file="./md22_DHA.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, get_forces=False):
+        super(MD22_DHA_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, get_forces=get_forces)
         
 
 # =============================================================================
@@ -200,8 +171,8 @@ class MD22_Stachyose_Dataset(MD22Dataset):
     N = 27272
     D = 87 x 3 = 261
     """    
-    def __init__(self, npz_file="./md22_stachyose.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, coulomb=COULOMB, get_forces=False):
-        super(MD22_Stachyose_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, coulomb=coulomb, get_forces=False)
+    def __init__(self, npz_file="./md22_stachyose.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, get_forces=False):
+        super(MD22_Stachyose_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, get_forces=False)
     
 
 # =============================================================================
@@ -232,8 +203,8 @@ class MD22_DNA_AT_AT_Dataset(MD22Dataset):
     N = 20001
     D = 60 x 3 = 180
     """    
-    def __init__(self, npz_file="./md22_AT-AT.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, coulomb=COULOMB, get_forces=False):
-        super(MD22_DNA_AT_AT_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, flat=True, coulomb=coulomb, get_forces=get_forces)
+    def __init__(self, npz_file="./md22_AT-AT.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, get_forces=False):
+        super(MD22_DNA_AT_AT_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, flat=True, get_forces=get_forces)
 
 
 # =============================================================================
@@ -259,27 +230,14 @@ def get_dna_at_at_cg_cg():
     for x, y in tqdm(dataloader):
         pass
 
-    M = 10
-    A = len(dataset.zs)
-    subset = np.stack([np.random.choice(A, 4, replace=False) for _ in range(M)])
-    sections = np.concatenate([3*subset, 3*subset+1, 3*subset+2], axis=1)
-    indices = torch.from_numpy(sections)
-    features, labels = zip(*[(torch.tensor(features), torch.tensor(labels)) for features, labels in dataset])
-    features = torch.stack(features).squeeze(-1)
-    labels = torch.stack(labels).squeeze(-1)
-    dataset2 = CoulombMD22Dataset(dataset.zs, features, labels, subset, indices)
-    dataloader = DataLoader(dataset2, batch_size=1024)
-    for x, y in tqdm(dataloader):
-        print(x.shape, y.shape)
-
 
 class MD22_DNA_AT_AT_CG_CG_Dataset(MD22Dataset):
     """
     N = 10153
     D = 118 x 3 = 354
     """    
-    def __init__(self, npz_file="./md22_AT-AT-CG-CG.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, coulomb=COULOMB, get_forces=False):
-        super(MD22_DNA_AT_AT_CG_CG_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, flat=True, coulomb=coulomb, get_forces=get_forces)
+    def __init__(self, npz_file="./md22_AT-AT-CG-CG.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, get_forces=False):
+        super(MD22_DNA_AT_AT_CG_CG_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, flat=True, get_forces=get_forces)
 
 
 # =============================================================================
@@ -305,27 +263,14 @@ def get_buckyball_catcher():
     for x, y in tqdm(dataloader):
         pass
 
-    M = 10
-    A = len(dataset.zs)
-    subset = np.stack([np.random.choice(A, 4, replace=False) for _ in range(M)])
-    sections = np.concatenate([3*subset, 3*subset+1, 3*subset+2], axis=1)
-    indices = torch.from_numpy(sections)
-    features, labels = zip(*[(torch.tensor(features), torch.tensor(labels)) for features, labels in dataset])
-    features = torch.stack(features).squeeze(-1)
-    labels = torch.stack(labels).squeeze(-1)
-    dataset2 = CoulombMD22Dataset(dataset.zs, features, labels, subset, indices)
-    dataloader = DataLoader(dataset2, batch_size=1024)
-    for x, y in tqdm(dataloader):
-        print(x.shape, y.shape)
-
 
 class MD22_Buckyball_Catcher_Dataset(MD22Dataset):
     """
     N = 6102
     D = 148 x 3 = 444
     """    
-    def __init__(self, npz_file="./md22_buckyball-catcher.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, coulomb=COULOMB, get_forces=False):
-        super(MD22_Buckyball_Catcher_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, flat=False, coulomb=coulomb, get_forces=get_forces)
+    def __init__(self, npz_file="./md22_buckyball-catcher.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, get_forces=False):
+        super(MD22_Buckyball_Catcher_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, flat=False, get_forces=get_forces)
 
 
 # =============================================================================
@@ -351,68 +296,22 @@ def get_double_walled_nanotube():
     for x, y in tqdm(dataloader):
         pass
 
-    M = 10
-    A = len(dataset.zs)
-    subset = np.stack([np.random.choice(A, 4, replace=False) for _ in range(M)])
-    sections = np.concatenate([3*subset, 3*subset+1, 3*subset+2], axis=1)
-    indices = torch.from_numpy(sections)
-    features, labels = zip(*[(torch.tensor(features), torch.tensor(labels)) for features, labels in dataset])
-    features = torch.stack(features).squeeze(-1)
-    labels = torch.stack(labels).squeeze(-1)
-    dataset2 = CoulombMD22Dataset(dataset.zs, features, labels, subset, indices)
-    dataloader = DataLoader(dataset2, batch_size=1024)
-    for x, y in tqdm(dataloader):
-        print(x.shape, y.shape)
-
 
 class MD22_DoubleWalledNanotube_Dataset(MD22Dataset):
     """
     N = 5032
     D = 370 x 3 = 1110
     """    
-    def __init__(self, npz_file="./md22_double-walled_nanotube.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, coulomb=COULOMB, get_forces=False):
-        super(MD22_DoubleWalledNanotube_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, flat=False, coulomb=coulomb, get_forces=get_forces)
-
-
-class CoulombMD22Dataset(Dataset):
-    def __init__(self, zs, features, labels, subset, indices) -> None:
-        super().__init__()
-        self.features = features
-        self.labels = labels
-        self.zs = zs
-        self.subset = subset
-        self.indices = indices.cpu()
-        self.features2 = []
-        for x in self.features:
-            pi_x = torch.gather(x.unsqueeze(0).expand(self.indices.shape[0], -1), 1, self.indices)
-            self.features2 += [self.coulomb_desc(self.zs[subset], pi_x.reshape(self.indices.shape[0], -1, 3))]
-        self.features2 = torch.stack(self.features2)
-
-    def coulomb_desc(self, zs, x):
-        A = zs.shape[-1]
-        radii = torch.cdist(x, x)
-        diag = torch.eye(zs.shape[-1]).unsqueeze(0) * (2.0 * zs ** (-2.4)).unsqueeze(-1)
-        return (1.0 / ((1.0 / zs.unsqueeze(-1)) * torch.sqrt(radii + 1e-10) + diag)).reshape(-1, A * A)
-
-    def __len__(self):
-        return len(self.labels)
-
-    def __getitem__(self, idx):
-        if torch.is_tensor(idx):
-            idx = idx.tolist()
-
-        features = self.features2[idx]
-        label = self.labels[idx]
-        return features, label
-
+    def __init__(self, npz_file="./md22_double-walled_nanotube.npz", dtype=torch.float32, transform=None, standarize=STANDARDIZE, get_forces=False):
+        super(MD22_DoubleWalledNanotube_Dataset, self).__init__(npz_file=npz_file, dtype=dtype, transform=transform, standarize=standarize, flat=False, get_forces=get_forces)
 
 
 if __name__ == "__main__":
-    # get_AcAla3NHME()
-    # get_DHA()
-    # get_stachyose()
-    # get_dna_at_at()
-    # get_dna_at_at_cg_cg()
+    get_AcAla3NHME()
+    get_DHA()
+    get_stachyose()
+    get_dna_at_at()
+    get_dna_at_at_cg_cg()
     get_buckyball_catcher()
     get_double_walled_nanotube()
     
