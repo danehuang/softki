@@ -49,7 +49,6 @@ class SoftGP(torch.nn.Module):
         fit_chunk_size=1024,
         use_qr=False,
         hutch_solver ="solve"
-        
     ) -> None:
         # Argument checking 
         methods = ["solve", "cholesky", "cg"]

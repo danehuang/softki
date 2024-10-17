@@ -1,8 +1,9 @@
 from gpytorch.distributions import MultivariateNormal
-import torch
 from gpytorch.functions import pivoted_cholesky
 from gpytorch.settings import max_preconditioner_size
-from linear_solver.preconditioner import _default_preconditioner
+import torch
+
+from linear_solver.preconditioner import _default_preconditioner, woodbury_preconditioner
 
 
 """
@@ -31,32 +32,12 @@ class HutchinsonPseudoLoss:
         kxx = function_dist.lazy_covariance_matrix.evaluate_kernel()
         forwards_matmul = kxx.matmul
 
-        if self.model.hutch_solver=="solve":
+        if self.model.hutch_solver == "solve":
             with torch.no_grad():
                 result = torch.linalg.solve(kxx, full_rhs)
                 result = torch.nan_to_num(result)
-        else:
-            # Cholesky Woodbury matrix preconditioner
-            k = 10  # Number of steps for the decomposition
-            # input: Anysor, rank: int, error_tol: Optional[float] = None, return_pivots: bool = False        # Greedy nystrom ! 
-            L_k = pivoted_cholesky(kxx, rank=k)
-            def preconditioner(v):
-                # sigma_sq = 1e-2  # Regularization term, can be adjusted based on problem
-                # Woodbury-based preconditioner P^{-1}v
-                P_inv_v = (v / 1e-3) - torch.matmul(
-                    L_k,
-                    torch.linalg.solve(
-                        torch.eye(L_k.size(1)) + (1 / 1e-3) * torch.matmul(L_k.T, L_k),
-                        torch.matmul(L_k.T, v)
-                    )
-                )
-                return P_inv_v
-            
-            precond=preconditioner
-            if precond is None:
-                print("precon was none")
-                precond = _default_preconditioner
-                
+        else:            
+            precond = woodbury_preconditioner(kxx, k=10, device=self.device)
             x0 = self.update_x0(full_rhs)
             result = self.model._solve_system(
                 kxx,
