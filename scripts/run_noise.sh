@@ -36,6 +36,7 @@ pushd ..
                 --training.learning_rate 0.01 \
                 --dataset.train_frac 0.9 \
                 --dataset.val_frac 0 \
+                --wandb.project $PROJECT \
                 --wandb.group $GROUP \
                 --wandb.watch
         done
