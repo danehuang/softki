@@ -14,13 +14,18 @@ import gpytorch.constraints
 from gpytorch.constraints import GreaterThan
 from gpytorch.kernels import RBFKernel, MaternKernel, ScaleKernel
 from gpytorch.means import ZeroMean
-# from mll_approximations.Hutchinsons.other_mlls import CGDMLL
 
 # Our imports
 from gp.util import dynamic_instantiation, flatten_dict, unflatten_dict, flatten_dataset, split_dataset, filter_param, heatmap
 
 
 def conjugate_gradient(A, b, max_iter=20, tolerance=1e-5, preconditioner=None):
+    """
+    Copyright (c) 2022, Wesley Maddox, Andres Potapczynski, Andrew Gordon Wilson
+    All rights reserved.
+
+    This file contains modifications to original.
+    """
     if preconditioner is None:
         preconditioner = torch.eye(b.size(0), device=b.device) 
     
@@ -46,6 +51,12 @@ def conjugate_gradient(A, b, max_iter=20, tolerance=1e-5, preconditioner=None):
 
 
 class CGDMLL(gpytorch.mlls.ExactMarginalLogLikelihood):
+    """
+    Copyright (c) 2022, Wesley Maddox, Andres Potapczynski, Andrew Gordon Wilson
+    All rights reserved.
+
+    This file contains modifications to original.
+    """
     def __init__(self, likelihood, model, max_cg_iters=50, cg_tolerance=1e-5):
         super().__init__(likelihood=likelihood, model=model)
         self.max_cg_iters = max_cg_iters
@@ -259,8 +270,8 @@ CONFIG = OmegaConf.create({
     },
     'dataset': {
         'name': 'elevators',
-        'train_frac': 4/9,
-        'val_frac': 3/9,
+        'train_frac': 0.9,
+        'val_frac': 0.0,
     },
     'training': {
         'seed': 42,

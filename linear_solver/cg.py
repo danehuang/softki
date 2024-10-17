@@ -8,7 +8,7 @@ from linear_solver.preconditioner import _default_preconditioner
 Copyright (c) 2022, Wesley Maddox, Andres Potapczynski, Andrew Gordon Wilson
 All rights reserved.
 
-This file contains modifications to original binary 
+This file contains modifications to original.
 """
 
 

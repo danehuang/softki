@@ -5,7 +5,7 @@ DEBUG=false
 DATA_DIR=data/uci_datasets/uci_datasets
 DATASETS=(pol elevators bike kin40k protein keggdirected slice keggundirected 3droad song buzz houseelectric)
 
-GROUP=benchmark-noworkers-nohutch
+GROUP=benchmark
 EPOCHS=50
 DEVICE="cuda:1"
 NUM_WORKERS=0
@@ -38,55 +38,55 @@ for seed in "${SEEDS[@]}"
             --wandb.group $GROUP \
             --wandb.watch
 
-        # python train.py \
-        #     --model.name svi-gp \
-        #     --model.num_inducing 512 \
-        #     --model.device $DEVICE \
-        #     --model.learn_noise \
-        #     --model.use_scale \
-        #     --data_dir $DATA_DIR \
-        #     --dataset.name $dataset \
-        #     --training.seed $seed \
-        #     --training.epochs $EPOCHS \
-        #     --training.learning_rate 0.01 \
-        #     --dataset.train_frac 0.9 \
-        #     --dataset.val_frac 0 \
-        #     --dataset.num_workers $NUM_WORKERS \
-        #     --wandb.group $GROUP \
-        #     --wandb.watch
+        python train.py \
+            --model.name svi-gp \
+            --model.num_inducing 512 \
+            --model.device $DEVICE \
+            --model.learn_noise \
+            --model.use_scale \
+            --data_dir $DATA_DIR \
+            --dataset.name $dataset \
+            --training.seed $seed \
+            --training.epochs $EPOCHS \
+            --training.learning_rate 0.01 \
+            --dataset.train_frac 0.9 \
+            --dataset.val_frac 0 \
+            --dataset.num_workers $NUM_WORKERS \
+            --wandb.group $GROUP \
+            --wandb.watch
 
-        # python train.py \
-        #     --model.name svi-gp \
-        #     --model.num_inducing 1024 \
-        #     --model.device $DEVICE \
-        #     --model.learn_noise \
-        #     --model.use_scale \
-        #     --data_dir $DATA_DIR \
-        #     --dataset.name $dataset \
-        #     --training.seed $seed \
-        #     --training.epochs $EPOCHS \
-        #     --training.learning_rate 0.01 \
-        #     --dataset.train_frac 0.9 \
-        #     --dataset.val_frac 0 \
-        #     --dataset.num_workers $NUM_WORKERS \
-        #     --wandb.group $GROUP \
-        #     --wandb.watch
+        python train.py \
+            --model.name svi-gp \
+            --model.num_inducing 1024 \
+            --model.device $DEVICE \
+            --model.learn_noise \
+            --model.use_scale \
+            --data_dir $DATA_DIR \
+            --dataset.name $dataset \
+            --training.seed $seed \
+            --training.epochs $EPOCHS \
+            --training.learning_rate 0.01 \
+            --dataset.train_frac 0.9 \
+            --dataset.val_frac 0 \
+            --dataset.num_workers $NUM_WORKERS \
+            --wandb.group $GROUP \
+            --wandb.watch
 
-        # python train.py \
-        #     --model.name sv-gp \
-        #     --model.num_inducing 512 \
-        #     --model.device $DEVICE \
-        #     --model.learn_noise \
-        #     --model.use_scale \
-        #     --data_dir $DATA_DIR \
-        #     --dataset.name $dataset \
-        #     --training.seed $seed \
-        #     --training.epochs $EPOCHS \
-        #     --training.learning_rate .1 \
-        #     --dataset.train_frac 0.9 \
-        #     --dataset.val_frac 0 \
-        #     --dataset.num_workers $NUM_WORKERS \
-        #     --wandb.group $GROUP \
-        #     --wandb.watch
+        python train.py \
+            --model.name sv-gp \
+            --model.num_inducing 512 \
+            --model.device $DEVICE \
+            --model.learn_noise \
+            --model.use_scale \
+            --data_dir $DATA_DIR \
+            --dataset.name $dataset \
+            --training.seed $seed \
+            --training.epochs $EPOCHS \
+            --training.learning_rate .1 \
+            --dataset.train_frac 0.9 \
+            --dataset.val_frac 0 \
+            --dataset.num_workers $NUM_WORKERS \
+            --wandb.group $GROUP \
+            --wandb.watch
     done
 done

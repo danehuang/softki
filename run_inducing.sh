@@ -4,7 +4,6 @@ DEBUG=false
 
 DATA_DIR=data/uci_datasets/uci_datasets
 DATASETS=(pol elevators bike kin40k protein keggdirected slice keggundirected 3droad song buzz houseelectric)
-# DATASETS=(houseelectric)
 
 GROUP=inducing
 EPOCHS=50
