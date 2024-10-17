@@ -3,8 +3,7 @@
 DEBUG=false
 
 DATA_DIR=data/
-# DATASETS=(Ac-Ala3-NHMe AT-AT-CG-CG AT-AT stachyose DHA buckyball-catcher double-walled-nanotube)
-DATASETS=(buckyball-catcher double-walled-nanotube)
+DATASETS=(Ac-Ala3-NHMe AT-AT-CG-CG AT-AT stachyose DHA buckyball-catcher double-walled-nanotube)
 
 GROUP=md22
 EPOCHS=50

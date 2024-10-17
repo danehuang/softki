@@ -5,13 +5,11 @@ DEBUG=false
 DATA_DIR=data/uci_datasets/uci_datasets
 # DATASETS=(pol elevators bike kin40k protein keggdirected slice keggundirected 3droad song buzz houseelectric)
 DATASETS=(pol elevators)
-# DATASETS=(pol)
 
 GROUP=benchmark
-EPOCHS=100
+EPOCHS=40
 DEVICE="cuda:0"
 SEEDS=(6535 8830 92357)
-# SEEDS=(6535)
 
 if $DEBUG; then
     EPOCHS=1
