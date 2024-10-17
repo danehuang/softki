@@ -6,6 +6,7 @@ DATA_DIR=data/uci_datasets/uci_datasets
 # DATASETS=(pol elevators bike kin40k protein keggdirected slice keggundirected 3droad song buzz houseelectric)
 DATASETS=(pol elevators)
 
+PROJECT=softki2
 GROUP=benchmark
 EPOCHS=40
 DEVICE="cuda:0"
@@ -30,6 +31,7 @@ do
             --training.learning_rate 0.1 \
             --dataset.train_frac 0.9 \
             --dataset.val_frac 0 \
+            --wandb.project $PROJECT \
             --wandb.group $GROUP \
             --wandb.watch
 

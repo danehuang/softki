@@ -5,6 +5,7 @@ DEBUG=false
 DATA_DIR=data/uci_datasets/uci_datasets
 DATASETS=(pol elevators bike kin40k protein keggdirected slice keggundirected 3droad song buzz houseelectric)
 
+PROJECT=softki2
 GROUP=noise
 EPOCHS=50
 NUM_INDUCING=512

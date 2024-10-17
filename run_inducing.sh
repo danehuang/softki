@@ -5,6 +5,7 @@ DEBUG=false
 DATA_DIR=data/uci_datasets/uci_datasets
 DATASETS=(pol elevators bike kin40k protein keggdirected slice keggundirected 3droad song buzz houseelectric)
 
+PROJECT=softki2
 GROUP=inducing
 EPOCHS=50
 NUM_INDUCING=(64 128 256 512 1024 1536 2048 4096)
@@ -39,6 +40,7 @@ do
                     --training.learning_rate 0.01 \
                     --dataset.train_frac 0.9 \
                     --dataset.val_frac 0 \
+                    --wandb.project $PROJECT \
                     --wandb.group $GROUP \
                     --wandb.watch
             done

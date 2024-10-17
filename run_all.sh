@@ -5,6 +5,7 @@ DEBUG=false
 DATA_DIR=data/uci_datasets/uci_datasets
 DATASETS=(pol elevators bike kin40k protein keggdirected slice keggundirected 3droad song buzz houseelectric)
 
+PROJECT=softki2
 GROUP=benchmark
 EPOCHS=50
 DEVICE="cuda:1"
@@ -35,6 +36,7 @@ for seed in "${SEEDS[@]}"
             --dataset.train_frac 0.9 \
             --dataset.val_frac 0 \
             --dataset.num_workers $NUM_WORKERS \
+            --wandb.project $PROJECT \
             --wandb.group $GROUP \
             --wandb.watch
 
@@ -52,6 +54,7 @@ for seed in "${SEEDS[@]}"
             --dataset.train_frac 0.9 \
             --dataset.val_frac 0 \
             --dataset.num_workers $NUM_WORKERS \
+            --wandb.project $PROJECT \
             --wandb.group $GROUP \
             --wandb.watch
 
@@ -69,6 +72,7 @@ for seed in "${SEEDS[@]}"
             --dataset.train_frac 0.9 \
             --dataset.val_frac 0 \
             --dataset.num_workers $NUM_WORKERS \
+            --wandb.project $PROJECT \
             --wandb.group $GROUP \
             --wandb.watch
 
@@ -86,6 +90,7 @@ for seed in "${SEEDS[@]}"
             --dataset.train_frac 0.9 \
             --dataset.val_frac 0 \
             --dataset.num_workers $NUM_WORKERS \
+            --wandb.project $PROJECT \
             --wandb.group $GROUP \
             --wandb.watch
     done

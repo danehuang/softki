@@ -5,6 +5,7 @@ DEBUG=false
 DATA_DIR=data/
 DATASETS=(Ac-Ala3-NHMe AT-AT-CG-CG AT-AT stachyose DHA buckyball-catcher double-walled-nanotube)
 
+PROJECT=softki2
 GROUP=md22
 EPOCHS=50
 DEVICE="cuda:1"
@@ -32,6 +33,7 @@ do
             --training.learning_rate 0.01 \
             --dataset.train_frac 0.9 \
             --dataset.val_frac 0 \
+            --wandb.project $PROJECT \
             --wandb.group $GROUP \
             --wandb.watch
 
@@ -48,6 +50,7 @@ do
             --training.learning_rate 0.01 \
             --dataset.train_frac 0.9 \
             --dataset.val_frac 0 \
+            --wandb.project $PROJECT \
             --wandb.group $GROUP \
             --wandb.watch
 
@@ -64,6 +67,7 @@ do
             --training.learning_rate .1 \
             --dataset.train_frac 0.9 \
             --dataset.val_frac 0 \
+            --wandb.project $PROJECT \
             --wandb.group $GROUP \
             --wandb.watch
     done
