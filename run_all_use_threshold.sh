@@ -4,13 +4,15 @@ DEBUG=false
 
 DATA_DIR=data/uci_datasets/uci_datasets
 # DATASETS=(pol elevators bike kin40k protein keggdirected slice keggundirected 3droad song buzz houseelectric)
-DATASETS=(elevators)
-THRESHOLDS=(1 0.1 0.01 0.001 0.0001)
+DATASETS=(bike kin40k protein keggdirected slice keggundirected 3droad song buzz houseelectric)
+# DATASETS=(elevators)
+THRESHOLDS=(0.001 0.0001 0.00001 0.000001)
 
 GROUP=benchmark-threshold-tune
 EPOCHS=50
 DEVICE="cuda:1"
-SEEDS=(6535 8830 92357)
+# SEEDS=(6535 8830 92357)
+SEEDS=(6535)
 
 if $DEBUG; then
     EPOCHS=1
