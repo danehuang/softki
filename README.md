@@ -42,7 +42,7 @@ python train.py
 
 ### UCI
 
-1. Make sure you have downloaded UCI data. Run GPs `./run_all.sh`
+1. Make sure you have downloaded UCI data. Run GPs `./run_uci.sh`
 
 2. Run analysis `./analysis/comparison.ipynb`
 
@@ -50,7 +50,7 @@ python train.py
 
 1. Make sure you have downloaded MD22 data.  Run GPs `./run_md22.sh`
 
-2. Run analysis `./analysis/comparison.ipynb`
+2. Run analysis `./analysis/md22.ipynb`
 
 ### Noise
 
