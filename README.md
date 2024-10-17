@@ -19,7 +19,7 @@ pip install -e .
 ```
 
 
-## Environnment
+## Environment
 
 ### Quick Install
 
