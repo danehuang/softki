@@ -10,6 +10,7 @@ from torchviz import make_dot
 # Gpytorch and linear_operator
 import gpytorch 
 import gpytorch.constraints
+from gpytorch.functions import pivoted_cholesky
 from gpytorch.kernels import ScaleKernel
 import linear_operator
 from linear_operator.operators.dense_linear_operator import DenseLinearOperator
@@ -18,6 +19,7 @@ from linear_operator.utils.cholesky import psd_safe_cholesky
 # Our imports
 from gp.soft_gp.mll import HutchinsonPseudoLoss
 from linear_solver.cg import linear_cg
+from linear_solver.preconditioner import woodbury_preconditioner
 
 
 # =============================================================================
@@ -46,6 +48,8 @@ class SoftGP(torch.nn.Module):
         mll_approx="hutchinson",
         fit_chunk_size=1024,
         use_qr=False,
+        hutch_solver ="solve"
+        
     ) -> None:
         # Argument checking 
         methods = ["solve", "cholesky", "cg"]
@@ -75,6 +79,7 @@ class SoftGP(torch.nn.Module):
         # Fit settings
         self.use_qr = use_qr
         self.fit_chunk_size = fit_chunk_size
+        self.hutch_solver = hutch_solver
 
         # Noise
         self.learn_noise = learn_noise
@@ -385,7 +390,7 @@ class SoftGP(torch.nn.Module):
             b.unsqueeze(1),
             x0=torch.zeros_like(b),
             forwards_matmul=A.matmul,
-            precond=None,
+            precond=woodbury_preconditioner(A, k=10, device=self.device),
             return_pinv=True
         )
 

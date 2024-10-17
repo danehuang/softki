@@ -33,9 +33,13 @@ def create_placeholders(rhs, residual, preconditioner, batch_shape):
     )
 
 
-def initialize_cg(matmul_closure, rhs, stop_updating_after, eps):
+def initialize_cg(matmul_closure, rhs, stop_updating_after, eps, preconditioner=None):
     initial_guess = torch.zeros_like(rhs)
-    preconditioner = _default_preconditioner
+    if preconditioner == None:
+        print("NOT USING PRECONDITIONER")
+        preconditioner = _default_preconditioner
+    else:
+        print("USING PRECONDITIONER")
     eps = torch.tensor(eps, dtype=rhs.dtype, device=rhs.device)
 
     residual = rhs - matmul_closure(initial_guess)
@@ -106,7 +110,7 @@ def linear_cg(
     rhs_norm = rhs_norm.masked_fill_(rhs_is_zero, 1)
     rhs = rhs.div(rhs_norm)
 
-    state, out = initialize_cg(matmul_closure, rhs, stop_updating_after, eps)
+    state, out = initialize_cg(matmul_closure, rhs, stop_updating_after, eps, preconditioner=preconditioner)
     x0, has_converged, r0, batch_shape, residual_norm = state
     (p0, gamma0, mul_storage, beta, alpha, is_zero, z0) = out
 
