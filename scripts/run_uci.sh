@@ -28,7 +28,7 @@ pushd ..
                 --model.use_qr \
                 --model.use_scale \
                 --model.T 1 \
-                --model.mll_approx exact \
+                --model.mll_approx hutchinson \
                 --data_dir $DATA_DIR \
                 --dataset.name $dataset \
                 --training.seed $seed \
