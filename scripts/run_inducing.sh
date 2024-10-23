@@ -26,7 +26,7 @@ pushd ..
             do
                 for batch_size in "${BATCH_SIZE[@]}"
                 do
-                    python train.py \
+                    python run.py \
                         --model.name soft-gp \
                         --model.num_inducing $num_inducing \
                         --model.device $DEVICE \

@@ -20,7 +20,7 @@ pushd ..
     do
         for seed in "${SEEDS[@]}"
         do
-            python train.py \
+            python run.py \
                 --model.name soft-gp \
                 --model.num_inducing 512 \
                 --model.device $DEVICE \
@@ -38,7 +38,7 @@ pushd ..
                 --wandb.group $GROUP \
                 --wandb.watch
 
-            python train.py \
+            python run.py \
                 --model.name svi-gp \
                 --model.num_inducing 1024 \
                 --model.device $DEVICE \
@@ -55,7 +55,7 @@ pushd ..
                 --wandb.group $GROUP \
                 --wandb.watch
 
-            python train.py \
+            python run.py \
                 --model.name sv-gp \
                 --model.num_inducing 512 \
                 --model.device $DEVICE \

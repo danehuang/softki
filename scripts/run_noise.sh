@@ -21,7 +21,7 @@ pushd ..
     do
         for seed in "${SEEDS[@]}"
         do
-            python train.py \
+            python run.py \
                 --model.name soft-gp \
                 --model.num_inducing $NUM_INDUCING \
                 --model.device $DEVICE \

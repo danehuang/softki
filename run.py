@@ -3,11 +3,10 @@ import argparse
 from omegaconf import OmegaConf
 
 # Our imports
-import gp.svi_gp
-import gp.svi_gp.svi_gp
-import gp.sv_gp.sv_gp
+import gp.svi_gp.train
+import gp.sv_gp.train
 import gp.soft_gp.train
-import gp.exact_gp.exact_gp
+import gp.exact_gp.train
 from gp.util import *
 
 
@@ -37,7 +36,7 @@ if __name__ == "__main__":
     )
 
     # Omega config to argparse
-    config = OmegaConf.merge(gp.svi_gp.svi_gp.CONFIG, gp.sv_gp.sv_gp.CONFIG, gp.soft_gp.train.CONFIG)
+    config = OmegaConf.merge(gp.svi_gp.train.CONFIG, gp.sv_gp.train.CONFIG, gp.soft_gp.train.CONFIG)
     parser = argparse.ArgumentParser(description="Example of converting OmegaConf to argparse")
     parser.add_argument("--data_dir", type=str, default="data/uci_datasets/uci_datasets")
     for key, value in flatten_dict(OmegaConf.to_container(config, resolve=True)).items():
@@ -63,17 +62,17 @@ if __name__ == "__main__":
 
     # Config and train function factory
     if cli_config["model.name"] == "svi-gp":
-        train_gp = gp.svi_gp.svi_gp.train_gp
-        config = OmegaConf.create(unflatten_dict(flatten_omegaconf(merge_dicts_keep_latest_not_none(gp.svi_gp.svi_gp.CONFIG, cli_config))))
+        train_gp = gp.svi_gp.train.train_gp
+        config = OmegaConf.create(unflatten_dict(flatten_omegaconf(merge_dicts_keep_latest_not_none(gp.svi_gp.train.CONFIG, cli_config))))
     elif cli_config["model.name"] == "soft-gp":
         train_gp = gp.soft_gp.train.train_gp
         config = OmegaConf.create(unflatten_dict(flatten_omegaconf(merge_dicts_keep_latest_not_none(gp.soft_gp.train.CONFIG, cli_config))))
     elif cli_config["model.name"] == "sv-gp":
-        train_gp = gp.sv_gp.sv_gp.train_gp
-        config = OmegaConf.create(unflatten_dict(flatten_omegaconf(merge_dicts_keep_latest_not_none(gp.sv_gp.sv_gp.CONFIG, cli_config))))
+        train_gp = gp.sv_gp.train.train_gp
+        config = OmegaConf.create(unflatten_dict(flatten_omegaconf(merge_dicts_keep_latest_not_none(gp.sv_gp.train.CONFIG, cli_config))))
     elif cli_config["model.name"] == "exact":
-        train_gp = gp.exact_gp.exact_gp.train_gp
-        config = OmegaConf.create(unflatten_dict(flatten_omegaconf(merge_dicts_keep_latest_not_none(gp.exact_gp.exact_gp.CONFIG, cli_config))))
+        train_gp = gp.exact_gp.train.train_gp
+        config = OmegaConf.create(unflatten_dict(flatten_omegaconf(merge_dicts_keep_latest_not_none(gp.exact_gp.train.CONFIG, cli_config))))
     else:
         raise ValueError(f"Name not found {config.model.name}")
 

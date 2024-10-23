@@ -20,7 +20,7 @@ pushd ..
         do
         for dataset in "${DATASETS[@]}"
         do
-            python train.py \
+            python run.py \
                 --model.name soft-gp \
                 --model.num_inducing 512 \
                 --model.device $DEVICE \
