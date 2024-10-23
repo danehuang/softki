@@ -1,28 +1,28 @@
-# System/Library imports
-from typing import *
+# System imports
 import time
+from typing import *
 
-# Common data science imports
-from omegaconf import OmegaConf
-import numpy as np
-from sklearn.cluster import KMeans
+# Gpytorch / Torch
+import gpytorch
+import gpytorch.constraints
+from gpytorch.constraints import GreaterThan
+from gpytorch.kernels import RBFKernel, MaternKernel, ScaleKernel
 import torch
 from torch.utils.data import DataLoader
-from tqdm import tqdm
+
+# Other
+from omegaconf import OmegaConf
+from tqdm import tqdm 
 
 try:
-    import wandb
+    import wandb 
 except:
     pass
 
-# GPytorch
-import gpytorch
-from gpytorch.constraints import GreaterThan
-from gpytorch.kernels import RBFKernel, MaternKernel
-
 # Our imports
-from gp.sv_gp.sv_gp import SGPRModel
-from gp.util import dynamic_instantiation, flatten_dict, flatten_dataset, split_dataset, filter_param, heatmap
+from gp.exact.mll import CGDMLL
+from gp.exact.model import ExactGPModel
+from gp.util import dynamic_instantiation, flatten_dict, flatten_dataset, split_dataset
 
 
 # =============================================================================
@@ -31,24 +31,23 @@ from gp.util import dynamic_instantiation, flatten_dict, flatten_dataset, split_
 
 CONFIG = OmegaConf.create({
     'model': {
-        'name': 'sv-gp',
+        'name': 'exact',
         'kernel': {
             '_target_': 'RBFKernel'
         },
         'use_scale': True,
-        'num_inducing': 512,
-        'induce_init': 'kmeans',
         'noise': 0.5,
         'noise_constraint': 1e-1,
         'learn_noise': True,
         'dtype': 'float32',
         'device': 'cpu',
+        'max_cg_iters': 50,
+        'cg_tolerance': 1e-3,
     },
     'dataset': {
         'name': 'elevators',
         'train_frac': 0.9,
         'val_frac': 0.0,
-        'num_workers': 0,
     },
     'training': {
         'seed': 42,
@@ -73,15 +72,16 @@ def train_gp(config, train_dataset, test_dataset):
     dataset_name = config.dataset.name
 
     # Unpack model configuration
-    kernel, use_scale, num_inducing, dtype, device, noise, noise_constraint, learn_noise = (
+    kernel, use_scale, dtype, device, noise, noise_constraint, learn_noise, max_cg_iters, cg_tolerance = (
         dynamic_instantiation(config.model.kernel),
         config.model.use_scale,
-        config.model.num_inducing,
         getattr(torch, config.model.dtype),
         config.model.device,
         config.model.noise,
         config.model.noise_constraint,
         config.model.learn_noise,
+        config.model.max_cg_iters,
+        config.model.cg_tolerance,
     )
 
     # Unpack training configuration
@@ -97,7 +97,7 @@ def train_gp(config, train_dataset, test_dataset):
         config_dict = flatten_dict(OmegaConf.to_container(config, resolve=True))
 
         # Create name
-        rname = f"svgp_{dataset_name}_{num_inducing}_{noise}_{seed}"
+        rname = f"exact_{dataset_name}_{noise}_{seed}"
         
         # Initialize wandb
         wandb.init(
@@ -113,21 +113,14 @@ def train_gp(config, train_dataset, test_dataset):
 
     # Dataset preparation
     train_x, train_y = flatten_dataset(train_dataset)
-
-    # Initialize inducing points with kmeans
-    kmeans = KMeans(n_clusters=num_inducing)
-    kmeans.fit(train_x)
-    centers = kmeans.cluster_centers_
-    inducing_points = torch.tensor(centers).to(dtype=dtype, device=device)
-
     train_x = train_x.to(dtype=dtype, device=device)
     train_y = train_y.to(dtype=dtype, device=device)
 
     # Model
     likelihood = gpytorch.likelihoods.GaussianLikelihood(noise_constraint=GreaterThan(noise_constraint)).to(device=device)
     likelihood.noise = torch.tensor([noise]).to(device=device)
-    model = SGPRModel(kernel, train_x, train_y, likelihood, inducing_points=inducing_points, use_scale=use_scale).to(device=device)
-    mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
+    model = ExactGPModel(train_x, train_y, likelihood, kernel=kernel, use_scale=use_scale).to(device=device)
+    mll = CGDMLL(likelihood, model, max_cg_iters=max_cg_iters, cg_tolerance=cg_tolerance)
 
     # Training parameters
     model.train()
@@ -136,9 +129,14 @@ def train_gp(config, train_dataset, test_dataset):
     # Set optimizer
     if learn_noise:
         params = model.parameters()
+        hypers = likelihood.parameters()
     else:
-        params = filter_param(model.named_parameters(), "likelihood.noise_covar.raw_noise")
-    optimizer = torch.optim.Adam([{'params': params}], lr=lr)
+        params = model.parameters()
+        hypers = []
+    optimizer = torch.optim.Adam([
+        {'params': params},
+        {'params': hypers}
+    ], lr=lr)
     lr_sched = lambda epoch: 1.0
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_sched)
     
@@ -149,7 +147,7 @@ def train_gp(config, train_dataset, test_dataset):
 
         # Load batch
         optimizer.zero_grad()
-        output = model(train_x)
+        output = likelihood(model(train_x))
         loss = -mll(output, train_y)
         loss.backward()
 
@@ -168,11 +166,6 @@ def train_gp(config, train_dataset, test_dataset):
         likelihood.train()
 
         if config.wandb.watch:
-            z = model.covar_module.inducing_points
-            K_zz = model.covar_module(z).evaluate()
-            K_zz = K_zz.detach().cpu().numpy()
-            custom_bins = [0, 1e-20, 1e-10, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 0.5, 20]
-            hist = np.histogram(K_zz.flatten(), bins=custom_bins)
             results = {
                 "loss": loss,
                 "test_nll": test_nll,
@@ -181,27 +174,7 @@ def train_gp(config, train_dataset, test_dataset):
                 "noise": model.get_noise(),
                 "lengthscale": model.get_lengthscale(),
                 "outputscale": model.get_outputscale(),
-                # "K_zz_bins": wandb.Histogram(np_histogram=hist),
-                "K_zz_norm_2": np.linalg.norm(K_zz, ord='fro'),
-                "K_zz_norm_1": np.linalg.norm(K_zz, ord=1),
-                "K_zz_norm_inf": np.linalg.norm(K_zz, ord=np.inf),
             }
-            for cnt, edge in zip(hist[0], hist[1]):
-                results[f"K_zz_bin_{edge}"] = cnt
-
-            if epoch % 10 == 0 or epoch == epochs - 1:
-                img = heatmap(K_zz)
-
-                results.update({
-                    "inducing_points": wandb.Histogram(z.detach().cpu().numpy()),
-                    "K_zz": wandb.Image(img)
-                })
-
-                artifact = wandb.Artifact(f"inducing_points_{rname}_{epoch}", type="parameters")
-                np.save("array.npy", z.detach().cpu().numpy()) 
-                artifact.add_file("array.npy")
-                wandb.log_artifact(artifact)
-
             wandb.log(results)
         
     return model, likelihood
@@ -248,6 +221,3 @@ if __name__ == "__main__":
 
     # Test
     model, likelihood = train_gp(CONFIG, train_dataset, test_dataset)
-    
-    # Evaluate
-    eval_gp(model, likelihood, test_dataset, device=CONFIG.model.device)
