@@ -21,7 +21,7 @@ pip install -e .
 3. Run `softki` on `pol` dataset (from UCI).
 
 ```
-python train.py \
+python run.py \
     --model.name softki \
     --model.num_inducing 512 \
     --model.device cuda:0 \
