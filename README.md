@@ -18,11 +18,11 @@ pip install -e .
 ./download_data.sh
 ```
 
-3. Run `soft-gp` on `pol` dataset (from UCI).
+3. Run `softki` on `pol` dataset (from UCI).
 
 ```
 python train.py \
-    --model.name soft-gp \
+    --model.name softki \
     --model.num_inducing 512 \
     --model.device cuda:0 \
     --model.use_qr \
@@ -39,7 +39,7 @@ python train.py \
 
 | Name | Description |
 | :------------ |  :----------- |
-| `model.name` | Specifies which model `soft-gp`, `svi-gp`, `sv-gp`, `exact`. |
+| `model.name` | Specifies which model `softki`, `svgp`, `sgpr`, `exact`. |
 | `model.num_inducing` | Number of inducing points to use. |
 | `model.device` |  Which GPU device to use (e.g., `cuda:0`). |
 | `model.use_qr` |  Flag to use qr solver for SoftKI. |

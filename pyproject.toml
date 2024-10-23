@@ -34,6 +34,6 @@ packages = [
 ] 
 
 [project.urls]
-homepage = "https://github.com/danehuang/soft-gp"
-source = "https://github.com/danehuang/soft-gp"
-bugtracker = "https://github.com/danehuang/soft-gp/issues"
+homepage = "https://github.com/danehuang/softki"
+source = "https://github.com/danehuang/softki"
+bugtracker = "https://github.com/danehuang/softki/issues"
