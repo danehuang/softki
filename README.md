@@ -35,11 +35,23 @@ python train.py \
     --training.learning_rate 0.01 \
 ```
 
-4. Optional: run benchmark
+### Variables / Arguments Explanation
 
-```
-./benchmark.sh
-```
+| Name | Description |
+| :------------ |  :-----------: |
+| `model.name` | Specifies which model `soft-gp`, `svi-gp`, `sv-gp`, `exact`. |
+| `model.num_inducing` | Number of inducing points to use. |
+| `model.device` |  Which GPU device to use (e.g., `cuda:0`). |
+| `model.use_qr` |  Flag to use qr solver for SoftKI. |
+| `model.use_scale` | Flag to use scale kernel. |
+| `model.mll_approx` | Set to `hutchinson` to. |
+| `data_dir` |  Path to data (e.g., `data/uci_datasets/uci_datasets`). |
+| `precond_size` |  Preconditioner rank. |
+| `dataset.name ` |  Name of dataset (see scripts for names) |
+| `training.seed` |  Set random seed to use. |
+| `training.epochs` | Number of epochs to train for. |
+| `training.learning_rate` |  Hyper-parameter optimization learning rate. |
+
 
 
 ### Manual Install
@@ -65,6 +77,19 @@ This repository contains implementations of a few GP methods.
 3. `gp/sv_gp` contains a [Sparse GP (often abbreviated SGPR)](https://proceedings.mlr.press/v5/titsias09a/titsias09a.pdf).
 4. `gp/svi_gp` containst a [Stochastic Variational Inference GP (often abbreviated SVGP)](https://arxiv.org/pdf/1309.6835).
 
+
+## Benchmark
+
+Run
+```
+./benchmark.sh
+```
+to test our method.
+
+
+## Experiments
+
+See [scripts/README.md](scripts/README.md) for how to replicate experiments.
 
 
 ## Licence
