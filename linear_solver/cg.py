@@ -1,14 +1,16 @@
-import torch
+# Gpytorch
 from gpytorch.utils.deprecation import bool_compat
+import torch
 
+# Our imports
 from linear_solver.preconditioner import _default_preconditioner
 
 
 """
+Adapted from: https://github.com/AndPotap/halfpres_gps
+
 Copyright (c) 2022, Wesley Maddox, Andres Potapczynski, Andrew Gordon Wilson
 All rights reserved.
-
-This file contains modifications to original.
 """
 
 

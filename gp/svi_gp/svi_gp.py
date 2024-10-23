@@ -8,7 +8,7 @@ from omegaconf.dictconfig import DictConfig
 import numpy as np
 from sklearn.cluster import KMeans
 import torch
-from torch.utils.data import DataLoader, random_split, Dataset
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 try:
@@ -25,7 +25,47 @@ from gpytorch.variational import VariationalStrategy
 from gpytorch.kernels import ScaleKernel, RBFKernel, MaternKernel
 
 # Our imports
-from gp.util import dynamic_instantiation, flatten_dict, unflatten_dict, flatten_dataset, split_dataset, filter_param, heatmap
+from gp.util import dynamic_instantiation, flatten_dict, flatten_dataset, split_dataset, filter_param, heatmap
+
+
+# =============================================================================
+# Configuration
+# =============================================================================
+
+CONFIG = OmegaConf.create({
+    'model': {
+        'name': 'svi-gp',
+        'kernel': {
+            '_target_': 'RBFKernel'
+        },
+        'use_scale': True,
+        'num_inducing': 1024,
+        'induce_init': 'kmeans',
+        'noise': 0.5,
+        'noise_constraint': 1e-1,
+        'learn_noise': True,
+        'dtype': 'float32',
+        'device': 'cpu',
+    },
+    'dataset': {
+        'name': 'elevators',
+        'train_frac': 0.9,
+        'val_frac': 0.0,
+        'num_workers': 0,
+    },
+    'training': {
+        'seed': 42,
+        'batch_size': 1024,
+        'learning_rate': 0.01,
+        'epochs': 50,
+    },
+    'wandb': {
+        'watch': True,
+        'group': 'test',
+        'entity': 'bogp',
+        'project': 'softki',
+    }
+})
 
 
 # =============================================================================
@@ -248,41 +288,9 @@ def eval_gp(model, likelihood, test_dataset, device="cuda:0", num_workers=4):
     return rmse, nll
 
 
-CONFIG = OmegaConf.create({
-    'model': {
-        'name': 'svi-gp',
-        'kernel': {
-            '_target_': 'RBFKernel'
-        },
-        'use_scale': True,
-        'num_inducing': 1024,
-        'induce_init': 'kmeans',
-        'noise': 0.5,
-        'noise_constraint': 1e-1,
-        'learn_noise': True,
-        'dtype': 'float32',
-        'device': 'cpu',
-    },
-    'dataset': {
-        'name': 'elevators',
-        'train_frac': 0.9,
-        'val_frac': 0.0,
-        'num_workers': 0,
-    },
-    'training': {
-        'seed': 42,
-        'batch_size': 1024,
-        'learning_rate': 0.01,
-        'epochs': 50,
-    },
-    'wandb': {
-        'watch': True,
-        'group': 'test',
-        'entity': 'bogp',
-        'project': 'softki',
-    }
-})
-
+# =============================================================================
+# Quick Test
+# =============================================================================
 
 if __name__ == "__main__":
     from data.get_uci import ElevatorsDataset

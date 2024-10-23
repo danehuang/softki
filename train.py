@@ -1,6 +1,8 @@
+# Arguments
 import argparse
 from omegaconf import OmegaConf
 
+# Our imports
 import gp.svi_gp
 import gp.svi_gp.svi_gp
 import gp.sv_gp.sv_gp

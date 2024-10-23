@@ -1,17 +1,17 @@
+# Gpytorch
 from gpytorch.distributions import MultivariateNormal
-from gpytorch.functions import pivoted_cholesky
-from gpytorch.settings import max_preconditioner_size
 import torch
 
-from linear_solver.preconditioner import _default_preconditioner, woodbury_preconditioner
+# Our imports
+from linear_solver.preconditioner import woodbury_preconditioner
 
-
-"""
-Copyright (c) 2022, Wesley Maddox, Andres Potapczynski, Andrew Gordon Wilson
-All rights reserved.
-"""
 
 class HutchinsonPseudoLoss:
+    """
+    Adapated from: https://github.com/AndPotap/halfpres_gps
+    Copyright (c) 2022, Wesley Maddox, Andres Potapczynski, Andrew Gordon Wilson
+    All rights reserved.
+    """
     def __init__(self, model, num_trace_samples=10, vector_format="randn"):
         self.model = model
         self.x0 = None
@@ -58,15 +58,12 @@ class HutchinsonPseudoLoss:
             / (2 * probe_vectors.shape[-1])
         )
         res = -data_term - logdet_term.sum(-1)
-        #num_data = function_dist.event_shape.numel()
         return res.div_(num_data)
 
     def get_rhs_and_probes(self, rhs, num_random_probes):
         dim = rhs.shape[-1]
         
         probe_vectors = torch.randn(dim, num_random_probes, device=rhs.device, dtype=rhs.dtype).contiguous()
-        # if self.vf == "sphere":
-        #     probe_vectors = probe_vectors / probe_vectors.norm(dim=0) 
         full_rhs = torch.cat((rhs.unsqueeze(-1), probe_vectors), -1)
         return full_rhs, probe_vectors
 

@@ -29,6 +29,57 @@ from gp.util import dynamic_instantiation, flatten_dict, unflatten_dict, flatten
 
 
 # =============================================================================
+# Configuration
+# =============================================================================
+
+CONFIG = OmegaConf.create({
+    'model': {
+        'name': 'soft-gp',
+        'kernel': {
+            '_target_': 'RBFKernel'
+        },
+        'use_scale': True,
+        'num_inducing': 512,
+        'induce_init': 'kmeans',
+        'noise': 1e-3,
+        'learn_noise': False,
+        'use_T': False,
+        'T': 5e-5,
+        'learn_T': False,
+        'threshold': 1e-2,
+        'use_threshold': False,
+        'learn_threshold': False,
+        'solver': 'solve',
+        'cg_tolerance': 1e-5,
+        'mll_approx': 'hutchinson',
+        'fit_chunk_size': 1024,
+        'use_qr': True,
+        'hutch_solver': 'solve',
+        'dtype': 'float32',
+        'device': 'cpu',
+    },
+    'dataset': {
+        'name': 'elevators',
+        'num_workers': 0,
+        'train_frac': 0.9,
+        'val_frac': 0.1,
+    },
+    'training': {
+        'seed': 42,
+        'batch_size': 1024,
+        'learning_rate': 0.01,
+        'epochs': 50,
+    },
+    'wandb': {
+        'watch': True,
+        'group': 'test',
+        'entity': 'bogp',
+        'project': 'softki',
+    }
+})
+
+
+# =============================================================================
 # Train and Evaluate
 # =============================================================================
 
@@ -230,52 +281,9 @@ def eval_gp(model: SoftGP, test_dataset: Dataset, device="cuda:0", num_workers=0
     }
 
 
-CONFIG = OmegaConf.create({
-    'model': {
-        'name': 'soft-gp',
-        'kernel': {
-            '_target_': 'RBFKernel'
-        },
-        'use_scale': True,
-        'num_inducing': 512,
-        'induce_init': 'kmeans',
-        'noise': 1e-3,
-        'learn_noise': False,
-        'use_T': False,
-        'T': 5e-5,
-        'learn_T': False,
-        'threshold': 1e-2,
-        'use_threshold': False,
-        'learn_threshold': False,
-        'solver': 'solve',
-        'cg_tolerance': 1e-5,
-        'mll_approx': 'hutchinson',
-        'fit_chunk_size': 1024,
-        'use_qr': True,
-        'hutch_solver': 'solve',
-        'dtype': 'float32',
-        'device': 'cpu',
-    },
-    'dataset': {
-        'name': 'elevators',
-        'num_workers': 0,
-        'train_frac': 0.9,
-        'val_frac': 0.1,
-    },
-    'training': {
-        'seed': 42,
-        'batch_size': 1024,
-        'learning_rate': 0.01,
-        'epochs': 50,
-    },
-    'wandb': {
-        'watch': True,
-        'group': 'test',
-        'entity': 'bogp',
-        'project': 'softki',
-    }
-})
-
+# =============================================================================
+# Quick test
+# =============================================================================
 
 if __name__ == "__main__":
     from data.get_uci import (

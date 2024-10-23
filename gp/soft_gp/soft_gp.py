@@ -9,7 +9,6 @@ import torch
 # Gpytorch and linear_operator
 import gpytorch 
 import gpytorch.constraints
-from gpytorch.functions import pivoted_cholesky
 from gpytorch.kernels import ScaleKernel
 import linear_operator
 from linear_operator.operators.dense_linear_operator import DenseLinearOperator
@@ -427,7 +426,6 @@ class SoftGP(torch.nn.Module):
         with torch.no_grad():
             # B^T = [(Lambda^{-1/2} \hat{K}_xz) U_zz ]
             psd_safe_cholesky(K_zz, out=self.U_zz, upper=True, max_tries=10)
-            # Lambda_half_inv_diag = (1 / torch.sqrt(self.noise)) * torch.ones(N, dtype=self.dtype).to(self.device)
             self.fit_buffer[:N,:] *= 1 / torch.sqrt(self.noise)
             self.fit_buffer[N:,:] = self.U_zz
 
@@ -474,7 +472,6 @@ class SoftGP(torch.nn.Module):
         K_zz = self._mk_cov(self.inducing_points)
 
         if self.use_qr:
-            # return self._qr_solve_fit(M, N, X, y, K_zz)
             return self._qr_solve_fit(M, N, X, y, K_zz)
         else:
             return self._direct_solve_fit(M, N, X, y, K_zz)

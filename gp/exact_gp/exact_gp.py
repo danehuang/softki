@@ -1,13 +1,12 @@
 import time
 from typing import *
-from math import sqrt
 import wandb 
 from tqdm import tqdm 
 
 from omegaconf import OmegaConf
 
 import torch
-from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.data import DataLoader
 
 import gpytorch
 import gpytorch.constraints
@@ -16,46 +15,58 @@ from gpytorch.kernels import RBFKernel, MaternKernel, ScaleKernel
 from gpytorch.means import ZeroMean
 
 # Our imports
-from gp.util import dynamic_instantiation, flatten_dict, unflatten_dict, flatten_dataset, split_dataset, filter_param, heatmap
+from gp.util import dynamic_instantiation, flatten_dict, flatten_dataset, split_dataset
 
 
-def conjugate_gradient(A, b, max_iter=20, tolerance=1e-5, preconditioner=None):
-    """
-    Copyright (c) 2022, Wesley Maddox, Andres Potapczynski, Andrew Gordon Wilson
-    All rights reserved.
+# =============================================================================
+# Configuration
+# =============================================================================
 
-    This file contains modifications to original.
-    """
-    if preconditioner is None:
-        preconditioner = torch.eye(b.size(0), device=b.device) 
-    
-    x = torch.zeros_like(b)
-    r = b - A.matmul(x)
-    z = preconditioner.matmul(r) 
-    p = z.clone()
-    rz_old = torch.dot(r.view(-1), z.view(-1))
+CONFIG = OmegaConf.create({
+    'model': {
+        'name': 'exact',
+        'kernel': {
+            '_target_': 'RBFKernel'
+        },
+        'use_scale': True,
 
-    for i in range(max_iter):
-        Ap = A.matmul(p)
-        alpha = rz_old / torch.dot(p.view(-1), Ap.view(-1))
-        x = x + alpha * p
-        r = r - alpha * Ap
-        z = preconditioner.matmul(r)  
-        rz_new = torch.dot(r.view(-1), z.view(-1))
-        if torch.sqrt(rz_new) < tolerance:
-            break
-        p = z + (rz_new / rz_old) * p
-        rz_old = rz_new
+        'noise': 0.5,
+        'noise_constraint': 1e-1,
+        'learn_noise': True,
+        'dtype': 'float32',
+        'device': 'cpu',
+        'max_cg_iters': 50,
+        'cg_tolerance': 1e-3,
+    },
+    'dataset': {
+        'name': 'elevators',
+        'train_frac': 0.9,
+        'val_frac': 0.0,
+    },
+    'training': {
+        'seed': 42,
+        'learning_rate': 0.1,
+        'epochs': 50,
+    },
+    'wandb': {
+        'watch': True,
+        'group': 'test',
+        'entity': 'bogp',
+        'project': 'softki',
+    }
+})
 
-    return x
 
+# =============================================================================
+# Conjugate Gradient MLL
+# =============================================================================
 
 class CGDMLL(gpytorch.mlls.ExactMarginalLogLikelihood):
     """
+    Adapated from: https://github.com/AndPotap/halfpres_gps
+
     Copyright (c) 2022, Wesley Maddox, Andres Potapczynski, Andrew Gordon Wilson
     All rights reserved.
-
-    This file contains modifications to original.
     """
     def __init__(self, likelihood, model, max_cg_iters=50, cg_tolerance=1e-5):
         super().__init__(likelihood=likelihood, model=model)
@@ -70,9 +81,39 @@ class CGDMLL(gpytorch.mlls.ExactMarginalLogLikelihood):
         residual = target - mean
 
         # Select the solver method
-        solve = conjugate_gradient(cov_matrix, residual, max_iter=self.max_cg_iters, tolerance=self.cg_tolerance)
+        solve = self.conjugate_gradient(cov_matrix, residual)
         mll = -0.5 * (residual.squeeze() @ solve).sum() - torch.logdet(cov_matrix)
         return mll
+    
+    def conjugate_gradient(self, A, b, preconditioner=None):
+        """
+        Adapated from: https://github.com/AndPotap/halfpres_gps
+        
+        Copyright (c) 2022, Wesley Maddox, Andres Potapczynski, Andrew Gordon Wilson
+        All rights reserved.
+        """
+        if preconditioner is None:
+            preconditioner = torch.eye(b.size(0), device=b.device) 
+        
+        x = torch.zeros_like(b)
+        r = b - A.matmul(x)
+        z = preconditioner.matmul(r) 
+        p = z.clone()
+        rz_old = torch.dot(r.view(-1), z.view(-1))
+
+        for i in range(self.max_cg_iters):
+            Ap = A.matmul(p)
+            alpha = rz_old / torch.dot(p.view(-1), Ap.view(-1))
+            x = x + alpha * p
+            r = r - alpha * Ap
+            z = preconditioner.matmul(r)  
+            rz_new = torch.dot(r.view(-1), z.view(-1))
+            if torch.sqrt(rz_new) < self.cg_tolerance:
+                break
+            p = z + (rz_new / rz_old) * p
+            rz_old = rz_new
+
+        return x
 
 
 # =============================================================================
@@ -252,40 +293,9 @@ def eval_gp(model, likelihood, test_dataset, device="cuda:0"):
     return rmse, nll
 
 
-CONFIG = OmegaConf.create({
-    'model': {
-        'name': 'exact',
-        'kernel': {
-            '_target_': 'RBFKernel'
-        },
-        'use_scale': True,
-
-        'noise': 0.5,
-        'noise_constraint': 1e-1,
-        'learn_noise': True,
-        'dtype': 'float32',
-        'device': 'cpu',
-        'max_cg_iters': 50,
-        'cg_tolerance': 1e-3,
-    },
-    'dataset': {
-        'name': 'elevators',
-        'train_frac': 0.9,
-        'val_frac': 0.0,
-    },
-    'training': {
-        'seed': 42,
-        'learning_rate': 0.1,
-        'epochs': 50,
-    },
-    'wandb': {
-        'watch': True,
-        'group': 'test',
-        'entity': 'bogp',
-        'project': 'softki',
-    }
-})
-
+# =============================================================================
+# Quick Test
+# =============================================================================
 
 if __name__ == "__main__":
     from data.get_uci import ElevatorsDataset
