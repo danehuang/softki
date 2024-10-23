@@ -26,17 +26,16 @@ pip install -e .
 ### Quick Install
 
 ```
-conda create --name softgp python=3.12
-pip install -r requirements.txt
+conda create --name softki python=3.12
 pip install -e .
 ```
 
 ### Manual Install
 
 ```
-conda create --name softgp python=3.12
+conda create --name softki python=3.12
 
-pip install torch torchvision torchaudio
+pip install torch
 pip install tqdm requests wandb
 pip install scipy scikit-learn pandas matplotlib omegaconf
 pip install gpytorch 
