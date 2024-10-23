@@ -117,3 +117,8 @@ python train.py \
 2. `gp/soft_gp` contains SoftKI (our method).
 3. `gp/sv_gp` contains a [Sparse GP (often abbreviated SGPR)](https://proceedings.mlr.press/v5/titsias09a/titsias09a.pdf).
 4. `gp/svi_gp` containst a [Stochastic Variational Inference GP (often abbreviated SVGP)](https://arxiv.org/pdf/1309.6835).
+
+
+## Licence
+
+This repository is released under the [Apache 2.0 license](LICENSE) file.
