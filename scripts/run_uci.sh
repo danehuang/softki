@@ -1,12 +1,12 @@
 #!/bin/bash
 
-DEBUG=true
+DEBUG=false
 
 DATA_DIR=data/uci_datasets/uci_datasets
 DATASETS=(pol elevators bike kin40k protein keggdirected slice keggundirected 3droad song buzz houseelectric)
 
 PROJECT=softki2
-GROUP=debug
+GROUP=benchmark
 EPOCHS=50
 DEVICE="cuda:1"
 NUM_WORKERS=0
