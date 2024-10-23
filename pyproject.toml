@@ -6,12 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "softki"
 version = "0.1.0"
 description = "High-Dimensional Gaussian Process Regression with Soft Kernel Interpolation"
-authors = [
-    { 
-        name="The SoftKI Authors",
-        email="huang.e.daniel@gmail.com",
-    }
-]
+authors = [{ name = "The SoftKI Authors", email = "huang.e.daniel@gmail.com" }]
+
 dependencies = [
     "torch>=2.4.1",
     "scipy>=1.14.1",
@@ -23,15 +19,15 @@ dependencies = [
     "seaborn>=0.13.2",
     "tqdm==4.66.5",
     "requests==2.32.3",
-    "wandb",
+    "wandb"
 ]
 
 [tool.setuptools]
 packages = [
     "data",
     "gp",
-    "linear_solver",
-] 
+    "linear_solver"
+]
 
 [project.urls]
 homepage = "https://github.com/danehuang/softki"
