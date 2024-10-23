@@ -88,7 +88,7 @@ to test our method.
 
 ## Experiments
 
-See [scripts/README.md](scripts/README.md) for how to replicate experiments.
+See [exp/README.md](scripts/README.md) for how to replicate experiments.
 
 
 ## Licence
