@@ -38,7 +38,7 @@ python train.py \
 ### Variables / Arguments Explanation
 
 | Name | Description |
-| :------------ |  :-----------: |
+| :------------ |  :----------- |
 | `model.name` | Specifies which model `soft-gp`, `svi-gp`, `sv-gp`, `exact`. |
 | `model.num_inducing` | Number of inducing points to use. |
 | `model.device` |  Which GPU device to use (e.g., `cuda:0`). |
