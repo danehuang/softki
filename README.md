@@ -8,7 +8,7 @@ We provide an implementation of a scalable and high-dimensional Gaussian Process
 1. Create environment
 
 ```
-conda create --name softgp python=3.12
+conda create --name softki python=3.12
 pip install -e .
 ```
 
