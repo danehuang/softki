@@ -22,25 +22,25 @@ pushd ..
         do
         for dataset in "${DATASETS[@]}"
         do
-            # python run.py \
-            #     --model.name soft-gp \
-            #     --model.num_inducing 512 \
-            #     --model.device $DEVICE \
-            #     --model.use_qr \
-            #     --model.use_scale \
-            #     --model.T 1 \
-            #     --model.mll_approx hutchinson \
-            #     --data_dir $DATA_DIR \
-            #     --dataset.name $dataset \
-            #     --training.seed $seed \
-            #     --training.epochs $EPOCHS \
-            #     --training.learning_rate 0.01 \
-            #     --dataset.train_frac 0.9 \
-            #     --dataset.val_frac 0 \
-            #     --dataset.num_workers $NUM_WORKERS \
-            #     --wandb.project $PROJECT \
-            #     --wandb.group $GROUP \
-            #     --wandb.watch
+            python run.py \
+                --model.name soft-gp \
+                --model.num_inducing 512 \
+                --model.device $DEVICE \
+                --model.use_qr \
+                --model.use_scale \
+                --model.T 1 \
+                --model.mll_approx hutchinson \
+                --data_dir $DATA_DIR \
+                --dataset.name $dataset \
+                --training.seed $seed \
+                --training.epochs $EPOCHS \
+                --training.learning_rate 0.01 \
+                --dataset.train_frac 0.9 \
+                --dataset.val_frac 0 \
+                --dataset.num_workers $NUM_WORKERS \
+                --wandb.project $PROJECT \
+                --wandb.group $GROUP \
+                --wandb.watch
 
             python run.py \
                 --model.name svi-gp \

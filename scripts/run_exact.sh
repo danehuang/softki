@@ -9,7 +9,7 @@ DATASETS=(pol elevators)
 PROJECT=softki2
 GROUP=benchmark
 EPOCHS=40
-DEVICE="cuda:0"
+DEVICE="cuda:1"
 SEEDS=(6535 8830 92357)
 
 if $DEBUG; then
@@ -21,7 +21,7 @@ pushd ..
     do
         for seed in "${SEEDS[@]}"
         do
-            python train.py \
+            python run.py \
                 --model.name exact \
                 --model.device $DEVICE \
                 --model.use_scale \
