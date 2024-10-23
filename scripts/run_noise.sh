@@ -22,7 +22,7 @@ pushd ..
         for seed in "${SEEDS[@]}"
         do
             python run.py \
-                --model.name soft-gp \
+                --model.name softki \
                 --model.num_inducing $NUM_INDUCING \
                 --model.device $DEVICE \
                 --model.use_qr \

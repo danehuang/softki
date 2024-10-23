@@ -21,7 +21,7 @@ pushd ..
         for dataset in "${DATASETS[@]}"
         do
             python run.py \
-                --model.name soft-gp \
+                --model.name softki \
                 --model.num_inducing 512 \
                 --model.device $DEVICE \
                 --model.use_qr \

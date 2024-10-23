@@ -21,7 +21,7 @@ pushd ..
         for seed in "${SEEDS[@]}"
         do
             python run.py \
-                --model.name soft-gp \
+                --model.name softki \
                 --model.num_inducing 512 \
                 --model.device $DEVICE \
                 --model.use_qr \
@@ -39,7 +39,7 @@ pushd ..
                 --wandb.watch
 
             python run.py \
-                --model.name svi-gp \
+                --model.name svgp \
                 --model.num_inducing 1024 \
                 --model.device $DEVICE \
                 --model.learn_noise \
@@ -56,7 +56,7 @@ pushd ..
                 --wandb.watch
 
             python run.py \
-                --model.name sv-gp \
+                --model.name sgpr \
                 --model.num_inducing 512 \
                 --model.device $DEVICE \
                 --model.learn_noise \

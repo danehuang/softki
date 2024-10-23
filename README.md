@@ -71,10 +71,10 @@ pip install -e .
 
 This repository contains implementations of a few GP methods.
 
-1. `gp/exact_gp` contains an Exact GP trained with conjugate gradient descent.
-2. `gp/soft_gp` contains SoftKI (our method).
-3. `gp/sv_gp` contains a [Sparse GP (often abbreviated SGPR)](https://proceedings.mlr.press/v5/titsias09a/titsias09a.pdf).
-4. `gp/svi_gp` containst a [Stochastic Variational Inference GP (often abbreviated SVGP)](https://arxiv.org/pdf/1309.6835).
+1. `gp/exact` contains an Exact GP trained with conjugate gradient descent.
+2. `gp/softki` contains SoftKI (our method).
+3. `gp/sgpr` contains a [Sparse GP (often abbreviated SGPR)](https://proceedings.mlr.press/v5/titsias09a/titsias09a.pdf).
+4. `gp/svgp` containst a [Stochastic Variational Inference GP (often abbreviated SVGP)](https://arxiv.org/pdf/1309.6835).
 
 
 ## Benchmark

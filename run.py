@@ -61,13 +61,13 @@ if __name__ == "__main__":
         return merged_dict
 
     # Config and train function factory
-    if cli_config["model.name"] == "svi-gp":
+    if cli_config["model.name"] == "svgp":
         train_gp = gp.svgp.train.train_gp
         config = OmegaConf.create(unflatten_dict(flatten_omegaconf(merge_dicts_keep_latest_not_none(gp.svgp.train.CONFIG, cli_config))))
-    elif cli_config["model.name"] == "soft-gp":
+    elif cli_config["model.name"] == "softki":
         train_gp = gp.softki.train.train_gp
         config = OmegaConf.create(unflatten_dict(flatten_omegaconf(merge_dicts_keep_latest_not_none(gp.softki.train.CONFIG, cli_config))))
-    elif cli_config["model.name"] == "sv-gp":
+    elif cli_config["model.name"] == "svgp":
         train_gp = gp.sgpr.train.train_gp
         config = OmegaConf.create(unflatten_dict(flatten_omegaconf(merge_dicts_keep_latest_not_none(gp.sgpr.train.CONFIG, cli_config))))
     elif cli_config["model.name"] == "exact":

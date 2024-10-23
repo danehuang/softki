@@ -23,7 +23,7 @@ pushd ..
         for dataset in "${DATASETS[@]}"
         do
             python run.py \
-                --model.name soft-gp \
+                --model.name softki \
                 --model.num_inducing 512 \
                 --model.device $DEVICE \
                 --model.use_qr \
@@ -43,7 +43,7 @@ pushd ..
                 --wandb.watch
 
             python run.py \
-                --model.name svi-gp \
+                --model.name svgp \
                 --model.num_inducing 512 \
                 --model.device $DEVICE \
                 --model.learn_noise \
@@ -60,26 +60,26 @@ pushd ..
                 --wandb.group $GROUP \
                 --wandb.watch
 
-            # python run.py \
-            #     --model.name svi-gp \
-            #     --model.num_inducing 1024 \
-            #     --model.device $DEVICE \
-            #     --model.learn_noise \
-            #     --model.use_scale \
-            #     --data_dir $DATA_DIR \
-            #     --dataset.name $dataset \
-            #     --training.seed $seed \
-            #     --training.epochs $EPOCHS \
-            #     --training.learning_rate 0.01 \
-            #     --dataset.train_frac 0.9 \
-            #     --dataset.val_frac 0 \
-            #     --dataset.num_workers $NUM_WORKERS \
-            #     --wandb.project $PROJECT \
-            #     --wandb.group $GROUP \
-            #     --wandb.watch
+            python run.py \
+                --model.name svgp \
+                --model.num_inducing 1024 \
+                --model.device $DEVICE \
+                --model.learn_noise \
+                --model.use_scale \
+                --data_dir $DATA_DIR \
+                --dataset.name $dataset \
+                --training.seed $seed \
+                --training.epochs $EPOCHS \
+                --training.learning_rate 0.01 \
+                --dataset.train_frac 0.9 \
+                --dataset.val_frac 0 \
+                --dataset.num_workers $NUM_WORKERS \
+                --wandb.project $PROJECT \
+                --wandb.group $GROUP \
+                --wandb.watch
 
             python run.py \
-                --model.name sv-gp \
+                --model.name sgpr \
                 --model.num_inducing 512 \
                 --model.device $DEVICE \
                 --model.learn_noise \

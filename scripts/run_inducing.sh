@@ -27,7 +27,7 @@ pushd ..
                 for batch_size in "${BATCH_SIZE[@]}"
                 do
                     python run.py \
-                        --model.name soft-gp \
+                        --model.name softki \
                         --model.num_inducing $num_inducing \
                         --model.device $DEVICE \
                         --model.use_qr \

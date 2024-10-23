@@ -22,14 +22,14 @@ pushd ..
         for dataset in "${DATASETS[@]}"
         do
             python run.py \
-                --model.name soft-gp \
+                --model.name softki \
                 --model.num_inducing 512 \
                 --model.device $DEVICE \
                 --model.scale_softmax \
                 --model.use_qr \
                 --model.use_scale \
                 --model.T 1 \
-                --model.mll_approx exact \
+                --model.mll_approx hutchinson \
                 --data_dir $DATA_DIR \
                 --dataset.name $dataset \
                 --training.seed $seed \
