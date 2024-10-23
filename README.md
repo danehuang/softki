@@ -1,5 +1,7 @@
 # Soft Kernel Interpolation
 
+We provide an implementation of a scalable and high-dimensional Gaussian Process (GP) with *Soft Kernel Interpolation* (SoftKI).
+
 
 
 ## Quick Start
@@ -104,3 +106,15 @@ python train.py \
 1. Run inducing experiments `./scripts/run_inducing.sh`
 
 2. Run analysis `./analysis/inducing.ipynb`
+
+### Conjugate Gradient
+
+1. Run analysis `./analysis/CG_testing2.ipynb`
+
+
+## Methods
+
+1. `gp/exact_gp` contains an Exact GP trained with conjugate gradient descent.
+2. `gp/soft_gp` contains SoftKI (our method).
+3. `gp/sv_gp` contains a [Sparse GP (often abbreviated SGPR)](https://proceedings.mlr.press/v5/titsias09a/titsias09a.pdf).
+4. `gp/svi_gp` containst a [Stochastic Variational Inference GP (often abbreviated SVGP)](https://arxiv.org/pdf/1309.6835).
