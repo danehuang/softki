@@ -65,11 +65,11 @@ datasets = [
 class UCIDataset(Dataset):
     def __init__(self, csv_file="./foobar.csv", dim=1, transform=None, standarize=True, header=True, sep=None):
         if sep is not None:
-            self.raw_data = pd.read_csv(csv_file, sep=sep)
+            self.raw_data = pd.read_csv(csv_file+ ".gz", sep=sep,compression='gzip')
         elif header:
-            self.raw_data = pd.read_csv(csv_file)
+            self.raw_data = pd.read_csv(csv_file+ ".gz",compression='gzip')
         else:
-            self.raw_data = pd.read_csv(csv_file, header=None)
+            self.raw_data = pd.read_csv(csv_file+ ".gz", header=None,compression='gzip')
         print("SIZE", self.raw_data.shape)
         self.transform = transform
         self.dim = dim
