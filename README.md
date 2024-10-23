@@ -46,7 +46,6 @@ python train.py \
 | `model.use_scale` | Flag to use scale kernel. |
 | `model.mll_approx` | Set to `hutchinson` to. |
 | `data_dir` |  Path to data (e.g., `data/uci_datasets/uci_datasets`). |
-| `precond_size` |  Preconditioner rank. |
 | `dataset.name ` |  Name of dataset (see scripts for names) |
 | `training.seed` |  Set random seed to use. |
 | `training.epochs` | Number of epochs to train for. |
