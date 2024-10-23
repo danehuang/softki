@@ -29,6 +29,7 @@ setup(
     long_description=README,
     long_description_content_type="text/markdown",
     author="The SoftKI Authors",
+    url="https://github.com/danehuang/soft-gp",
     author_email="",
     license="Apache 2.0",
     classifiers=[

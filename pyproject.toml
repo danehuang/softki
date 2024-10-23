@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "softki"
+version = "0.1.0"
+description = "High-Dimensional Gaussian Process Regression with Soft Kernel Interpolation"
+authors = [
+    { 
+        name="The SoftKI Authors",
+        email="huang.e.daniel@gmail.com",
+    }
+]
+dependencies = [
+    "torch>=2.4.1",
+    "scipy>=1.14.1",
+    "scikit-learn>=1.5.2",
+    "pandas>=2.2.3",
+    "matplotlib>=3.9.2",
+    "omegaconf>=2.3.0",
+    "gpytorch==1.13",
+    "seaborn>=0.13.2",
+    "tqdm==4.66.5",
+    "requests==2.32.3",
+    "wandb",
+]
+
+[tool.setuptools]
+packages = [
+    "data",
+    "gp",
+    "linear_solver",
+] 
+
+[project.urls]
+homepage = "https://github.com/danehuang/soft-gp"
+source = "https://github.com/danehuang/soft-gp"
+bugtracker = "https://github.com/danehuang/soft-gp/issues"
