@@ -3,7 +3,6 @@
 We provide an implementation of a scalable and high-dimensional Gaussian Process (GP) with *Soft Kernel Interpolation* (SoftKI).
 
 
-
 ## Quick Start
 
 1. Create environment
@@ -36,6 +35,12 @@ python train.py \
     --training.learning_rate 0.01 \
 ```
 
+4. Optional: run benchmark
+
+```
+./benchmark.sh
+```
+
 
 ### Manual Install
 
@@ -52,6 +57,8 @@ pip install -e .
 
 
 ## Methods
+
+This repository contains implementations of a few GP methods.
 
 1. `gp/exact_gp` contains an Exact GP trained with conjugate gradient descent.
 2. `gp/soft_gp` contains SoftKI (our method).
