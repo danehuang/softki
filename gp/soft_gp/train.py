@@ -62,7 +62,7 @@ CONFIG = OmegaConf.create({
         'name': 'elevators',
         'num_workers': 0,
         'train_frac': 0.9,
-        'val_frac': 0.1,
+        'val_frac': 0.0,
     },
     'training': {
         'seed': 42,
