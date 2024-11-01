@@ -1,6 +1,6 @@
 # Soft Kernel Interpolation
 
-We provide an implementation of a scalable and high-dimensional Gaussian Process (GP) with *Soft Kernel Interpolation* (SoftKI).
+We provide an implementation of a scalable and high-dimensional Gaussian Process (GP) with *Soft Kernel Interpolation* (SoftKI) [[https://arxiv.org/abs/2410.21419]](https://arxiv.org/abs/2410.21419).
 
 
 ## Quick Start
