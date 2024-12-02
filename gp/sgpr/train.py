@@ -33,8 +33,10 @@ CONFIG = OmegaConf.create({
     'model': {
         'name': 'sv-gp',
         'kernel': {
-            '_target_': 'RBFKernel'
+            '_target_': 'RBFKernel',
+            'ard_num_dims': None,
         },
+        'use_ard': False,
         'use_scale': True,
         'num_inducing': 512,
         'induce_init': 'kmeans',
@@ -73,8 +75,9 @@ def train_gp(config, train_dataset, test_dataset):
     dataset_name = config.dataset.name
 
     # Unpack model configuration
-    kernel, use_scale, num_inducing, dtype, device, noise, noise_constraint, learn_noise = (
+    kernel, use_ard, use_scale, num_inducing, dtype, device, noise, noise_constraint, learn_noise = (
         dynamic_instantiation(config.model.kernel),
+        config.model.use_ard,
         config.model.use_scale,
         config.model.num_inducing,
         getattr(torch, config.model.dtype),
@@ -83,6 +86,9 @@ def train_gp(config, train_dataset, test_dataset):
         config.model.noise_constraint,
         config.model.learn_noise,
     )
+    if use_ard:
+        config.model.kernel.ard_num_dims = train_dataset.dim
+        kernel = dynamic_instantiation(config.model.kernel)
 
     # Unpack training configuration
     seed, epochs, lr = (
@@ -97,7 +103,7 @@ def train_gp(config, train_dataset, test_dataset):
         config_dict = flatten_dict(OmegaConf.to_container(config, resolve=True))
 
         # Create name
-        rname = f"svgp_{dataset_name}_{num_inducing}_{noise}_{seed}"
+        rname = f"sgpr_{dataset_name}_{num_inducing}_{noise}_{seed}"
         
         # Initialize wandb
         wandb.init(

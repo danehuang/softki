@@ -36,8 +36,10 @@ CONFIG = OmegaConf.create({
     'model': {
         'name': 'soft-gp',
         'kernel': {
-            '_target_': 'RBFKernel'
+            '_target_': 'RBFKernel',
+            'ard_num_dims': None,
         },
+        'use_ard': False,
         'use_scale': True,
         'num_inducing': 512,
         'induce_init': 'kmeans',
@@ -88,8 +90,9 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
     dataset_name = config.dataset.name
 
     # Unpack model configuration
-    kernel, use_scale, num_inducing, induce_init, dtype, device, noise, learn_noise, solver, cg_tolerance, mll_approx, fit_chunk_size, use_qr = (
+    kernel, use_ard, use_scale, num_inducing, induce_init, dtype, device, noise, learn_noise, solver, cg_tolerance, mll_approx, fit_chunk_size, use_qr = (
         dynamic_instantiation(config.model.kernel),
+        config.model.use_ard,
         config.model.use_scale,
         config.model.num_inducing,
         config.model.induce_init,
@@ -103,6 +106,9 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
         config.model.fit_chunk_size,
         config.model.use_qr,
     )
+    if use_ard:
+        config.model.kernel.ard_num_dims = train_dataset.dim
+        kernel = dynamic_instantiation(config.model.kernel)
 
     use_T, T, learn_T, use_threshold, threshold, learn_threshold = (
         config.model.use_T,

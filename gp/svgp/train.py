@@ -34,8 +34,10 @@ CONFIG = OmegaConf.create({
     'model': {
         'name': 'svi-gp',
         'kernel': {
-            '_target_': 'RBFKernel'
+            '_target_': 'RBFKernel',
+            'ard_num_dims': None,
         },
+        'use_ard': False,
         'use_scale': True,
         'num_inducing': 1024,
         'induce_init': 'kmeans',
@@ -75,8 +77,9 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
     dataset_name = config.dataset.name
 
     # Unpack model configuration
-    kernel, use_scale, num_inducing, dtype, device, noise, noise_constraint, learn_noise = (
+    kernel, use_ard, use_scale, num_inducing, dtype, device, noise, noise_constraint, learn_noise = (
         dynamic_instantiation(config.model.kernel),
+        config.model.use_ard,
         config.model.use_scale,
         config.model.num_inducing,
         getattr(torch, config.model.dtype),
@@ -85,6 +88,9 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset):
         config.model.noise_constraint,
         config.model.learn_noise,
     )
+    if use_ard:
+        config.model.kernel.ard_num_dims = train_dataset.dim
+        kernel = dynamic_instantiation(config.model.kernel)
 
     # Unpack training configuration
     seed, batch_size, epochs, lr = (
