@@ -67,7 +67,7 @@ if __name__ == "__main__":
     elif cli_config["model.name"] == "softki":
         train_gp = gp.softki.train.train_gp
         config = OmegaConf.create(unflatten_dict(flatten_omegaconf(merge_dicts_keep_latest_not_none(gp.softki.train.CONFIG, cli_config))))
-    elif cli_config["model.name"] == "svgp":
+    elif cli_config["model.name"] == "sgpr":
         train_gp = gp.sgpr.train.train_gp
         config = OmegaConf.create(unflatten_dict(flatten_omegaconf(merge_dicts_keep_latest_not_none(gp.sgpr.train.CONFIG, cli_config))))
     elif cli_config["model.name"] == "exact":
