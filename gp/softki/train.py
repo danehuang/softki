@@ -270,7 +270,8 @@ def train_gp(config: DictConfig, train_dataset: Dataset, test_dataset: Dataset) 
 def eval_gp(model: SoftGP, test_dataset: Dataset, device="cuda:0", num_workers=0) -> float:
     preds = []
     neg_mlls = []
-    test_loader = DataLoader(test_dataset, batch_size=1024, shuffle=False, num_workers=num_workers)
+    batch_size = 256 if len(test_dataset) > 50000 else 1024
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
     
     for x_batch, y_batch in tqdm(test_loader):
         x_batch = x_batch.to(device)

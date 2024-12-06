@@ -504,17 +504,24 @@ class SoftGP(torch.nn.Module):
         W_star_z = self._interp(x_star)
         return torch.matmul(W_star_z, self.K_zz_alpha).squeeze(-1)
 
-    def pred_cov(self, x_star):
+    def pred_cov(self, x_star: torch.Tensor) -> torch.Tensor:
         # \tilde{Q}^z_{∗∗} − \tilde{Q}^z_{∗x}(\Lambda^{−1} − \Lambda^{−1} \hat{K}_{xz} \hat{C}^{−1} \hat{K}_{zx} \Lambda^{−1}) \tilde{Q}^z_{x*}
         #   = \tilde{Q}^z_{∗∗} −
         #     \tilde{Q}^z_{∗x}\Lambda^{−1}\tilde{Q}^z_{x*} −
         #     \tilde{Q}^z_{∗x} (\Lambda^{−1} \hat{K}_{xz} \hat{C}^{−1} \hat{K}_{zx} \Lambda^{−1}) \tilde{Q}^z_{x*}
 
-        W_star_z = self._interp(x_star)
-        # K_hat_xz = (self.fit_buffer[:self.N,:] * torch.sqrt(self.noise))
-        Q_star_x = (W_star_z @ self.hat_K_xz.T)
-        fit_b = 1 / torch.sqrt(self.noise) * Q_star_x.T
-        beta = torch.linalg.solve_triangular(self.R, (self.Q.T[:, 0:self.N] @ fit_b), upper=True)
-        Q_star_star = W_star_z @ self.K_zz @ W_star_z.T
-        res = Q_star_star + Q_star_x @ (1/self.noise * Q_star_x.T) - Q_star_x @ ((self.fit_buffer[:self.N,:] / torch.sqrt(self.noise)) @ beta)
-        return torch.clamp(res, min=self.noise)
+        with torch.no_grad():
+            W_star_z = self._interp(x_star)
+            Q_star_x = (W_star_z @ self.hat_K_xz.T)
+            
+            # fit_b = 1 / torch.sqrt(self.noise) * Q_star_x.T
+            Q_star_x /= torch.sqrt(self.noise)
+            fit_b = Q_star_x.T
+
+            beta = torch.linalg.solve_triangular(self.R, (self.Q.T[:, 0:self.N] @ fit_b), upper=True)
+            Q_star_star = W_star_z @ self.K_zz @ W_star_z.T
+            
+            # res = Q_star_star + Q_star_x @ (1/self.noise * Q_star_x.T) - Q_star_x @ ((self.fit_buffer[:self.N,:] / torch.sqrt(self.noise)) @ beta)
+            res = Q_star_star + Q_star_x @ Q_star_x.T - (Q_star_x @ self.fit_buffer[:self.N,:]) @ beta
+            
+            return torch.clamp(res, min=self.noise)
