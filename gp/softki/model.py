@@ -510,4 +510,5 @@ class SoftGP(torch.nn.Module):
         fit_b = 1 / torch.sqrt(self.noise) * Q_star_x.T
         beta = torch.linalg.solve_triangular(self.R, (self.Q.T[:, 0:self.N] @ fit_b), upper=True)
         Q_star_star = W_star_z @ self.K_zz @ W_star_z.T
-        return Q_star_star + Q_star_x @ (1/self.noise * Q_star_x.T) - Q_star_x @ ((self.fit_buffer[:self.N,:] / torch.sqrt(self.noise)) @ beta)
+        res = Q_star_star + Q_star_x @ (1/self.noise * Q_star_x.T) - Q_star_x @ ((self.fit_buffer[:self.N,:] / torch.sqrt(self.noise)) @ beta)
+        return torch.clamp(res, min=self.noise)
