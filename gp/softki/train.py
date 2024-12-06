@@ -278,7 +278,8 @@ def eval_gp(model: SoftGP, test_dataset: Dataset, device="cuda:0", num_workers=0
         pred_mean = model.pred(x_batch)
         preds += [(pred_mean - y_batch).detach().cpu()**2]
         covar = model.pred_cov(x_batch)
-        nll = -torch.distributions.Normal(pred_mean, torch.sqrt(covar.diag())).log_prob(y_batch)
+        nll = -torch.distributions.Normal(pred_mean, torch.sqrt(covar.diag())).log_prob(y_batch).detach().cpu()
+        # nll = torch.tensor([0])
         neg_mlls += [nll]
     rmse = torch.sqrt(torch.sum(torch.cat(preds)) / len(test_dataset)).item()
     neg_mll = torch.cat(neg_mlls).mean()

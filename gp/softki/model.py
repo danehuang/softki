@@ -169,6 +169,7 @@ class SoftGP(torch.nn.Module):
         self.U_zz = torch.zeros((M, M), dtype=self.dtype, device=self.device)
         self.K_zz_alpha = torch.zeros(M, dtype=self.dtype, device=self.device)
         self.alpha = torch.zeros((M, 1), dtype=self.dtype, device=self.device)
+        self.store_K_hat_xz = True
 
         # QR artifacts
         self.fit_buffer = None
@@ -403,6 +404,8 @@ class SoftGP(torch.nn.Module):
         else:
             if self.fit_buffer is None:
                 self.fit_buffer = torch.zeros((N + M, M), dtype=self.dtype, device=self.device)
+                if self.store_K_hat_xz:
+                    self.hat_K_xz = torch.zeros((N, M), dtype=self.dtype, device=self.device)
                 self.fit_b = torch.zeros(N, dtype=self.dtype, device=self.device)
 
             # Compute: W_xz K_zz in a batched fashion
@@ -422,6 +425,9 @@ class SoftGP(torch.nn.Module):
                     X_batch = X[start:]
                     W_xz = self._interp(X_batch)
                     torch.matmul(W_xz, K_zz, out=self.fit_buffer[start:N,:])
+
+                if self.store_K_hat_xz:
+                    self.hat_K_xz[:,:] = self.fit_buffer[:N,:]
         
         with torch.no_grad():
             # B^T = [(Lambda^{-1/2} \hat{K}_xz) U_zz ]
@@ -505,8 +511,8 @@ class SoftGP(torch.nn.Module):
         #     \tilde{Q}^z_{∗x} (\Lambda^{−1} \hat{K}_{xz} \hat{C}^{−1} \hat{K}_{zx} \Lambda^{−1}) \tilde{Q}^z_{x*}
 
         W_star_z = self._interp(x_star)
-        K_hat_xz = (self.fit_buffer[:self.N,:] * torch.sqrt(self.noise))
-        Q_star_x = (W_star_z @ K_hat_xz.T)
+        # K_hat_xz = (self.fit_buffer[:self.N,:] * torch.sqrt(self.noise))
+        Q_star_x = (W_star_z @ self.hat_K_xz.T)
         fit_b = 1 / torch.sqrt(self.noise) * Q_star_x.T
         beta = torch.linalg.solve_triangular(self.R, (self.Q.T[:, 0:self.N] @ fit_b), upper=True)
         Q_star_star = W_star_z @ self.K_zz @ W_star_z.T
