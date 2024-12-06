@@ -271,13 +271,17 @@ def eval_gp(model: SoftGP, test_dataset: Dataset, device="cuda:0", num_workers=0
     preds = []
     neg_mlls = []
     test_loader = DataLoader(test_dataset, batch_size=1024, shuffle=False, num_workers=num_workers)
+    
     for x_batch, y_batch in tqdm(test_loader):
         x_batch = x_batch.to(device)
         y_batch = y_batch.to(device)
-        preds += [(model.pred(x_batch) - y_batch).detach().cpu()**2]
-        neg_mlls += [-model.mll(x_batch, y_batch).detach().cpu()]
+        pred_mean = model.pred(x_batch)
+        preds += [(pred_mean - y_batch).detach().cpu()**2]
+        covar = model.pred_cov(x_batch)
+        nll = -torch.distributions.Normal(pred_mean, torch.sqrt(covar.diag())).log_prob(y_batch)
+        neg_mlls += [nll]
     rmse = torch.sqrt(torch.sum(torch.cat(preds)) / len(test_dataset)).item()
-    neg_mll = torch.sum(torch.tensor(neg_mlls))
+    neg_mll = torch.cat(neg_mlls).mean()
             
     print("RMSE:", rmse, "NEG_MLL", neg_mll.item(), "NOISE", model.noise.cpu().item(), "LENGTHSCALE", model.get_lengthscale(), "OUTPUTSCALE", model.get_outputscale(), "THRESHOLD", model.threshold.cpu().item(), "T", model.T.cpu().item())
     

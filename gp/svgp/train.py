@@ -245,13 +245,13 @@ def eval_gp(model, likelihood, test_dataset, device="cuda:0", num_workers=4):
     for test_x, test_y in tqdm(test_loader):
         output = likelihood(model(test_x.to(device=device)))
         means = output.mean.cpu()
-        stds = output.variance.sqrt().cpu()
-        nll = -torch.distributions.Normal(means, stds).log_prob(test_y).mean()
+        stds = output.variance.add(likelihood.noise_covar.noise).sqrt().cpu()
+        nll = -torch.distributions.Normal(means, stds).log_prob(test_y)
         se = torch.sum((means - test_y)**2)
         squared_errors += [se]
         nlls += [nll]
     rmse = torch.sqrt(torch.sum(torch.tensor(squared_errors)) / len(test_dataset))
-    nll = torch.sum(torch.tensor(nlls))
+    nll = torch.cat(nlls).mean()
 
     print("RMSE", rmse, rmse.dtype, "NLL", nll, "NOISE", likelihood.noise_covar.noise.cpu().item(), "LENGTHSCALE", model.get_lengthscale(), "OUTPUTSCALE", model.get_outputscale())
     return rmse, nll

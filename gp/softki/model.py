@@ -470,6 +470,8 @@ class SoftGP(torch.nn.Module):
 
         # Form K_zz
         K_zz = self._mk_cov(self.inducing_points)
+        self.N = N
+        self.K_zz = K_zz
 
         if self.use_qr:
             return self._qr_solve_fit(M, N, X, y, K_zz)
@@ -495,3 +497,17 @@ class SoftGP(torch.nn.Module):
         """        
         W_star_z = self._interp(x_star)
         return torch.matmul(W_star_z, self.K_zz_alpha).squeeze(-1)
+
+    def pred_cov(self, x_star):
+        # \tilde{Q}^z_{∗∗} − \tilde{Q}^z_{∗x}(\Lambda^{−1} − \Lambda^{−1} \hat{K}_{xz} \hat{C}^{−1} \hat{K}_{zx} \Lambda^{−1}) \tilde{Q}^z_{x*}
+        #   = \tilde{Q}^z_{∗∗} −
+        #     \tilde{Q}^z_{∗x}\Lambda^{−1}\tilde{Q}^z_{x*} −
+        #     \tilde{Q}^z_{∗x} (\Lambda^{−1} \hat{K}_{xz} \hat{C}^{−1} \hat{K}_{zx} \Lambda^{−1}) \tilde{Q}^z_{x*}
+
+        W_star_z = self._interp(x_star)
+        K_hat_xz = (self.fit_buffer[:self.N,:] * torch.sqrt(self.noise))
+        Q_star_x = (W_star_z @ K_hat_xz.T)
+        fit_b = 1 / torch.sqrt(self.noise) * Q_star_x.T
+        beta = torch.linalg.solve_triangular(self.R, (self.Q.T[:, 0:self.N] @ fit_b), upper=True)
+        Q_star_star = W_star_z @ self.K_zz @ W_star_z.T
+        return Q_star_star + Q_star_x @ (1/self.noise * Q_star_x.T) - Q_star_x @ ((self.fit_buffer[:self.N,:] / torch.sqrt(self.noise)) @ beta)
