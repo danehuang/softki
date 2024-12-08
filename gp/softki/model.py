@@ -88,9 +88,12 @@ class SoftGP(torch.nn.Module):
         else:
             self.raw_noise = torch.tensor([noise], dtype=self.dtype, device=self.device)
 
+        self.learn_T = learn_T
         self.use_T = use_T
+        D = inducing_points.shape[-1]
         self.T_constraint = gpytorch.constraints.GreaterThan(5e-5)
-        T = torch.tensor([T], dtype=self.dtype, device=self.device)
+        # T = torch.tensor([T], dtype=self.dtype, device=self.device)
+        T = torch.full((D,), T, dtype=self.dtype, device=self.device)
         T = self.T_constraint.inverse_transform(T)
         if learn_T:
             self.register_parameter("raw_T", torch.nn.Parameter(T))
